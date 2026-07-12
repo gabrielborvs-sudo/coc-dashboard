@@ -32,6 +32,56 @@ API_BASE = os.environ.get("COC_API_BASE", "https://api.clashofclans.com/v1")
 TH_ICON = "https://www.clash.ninja/images/entities/1_{n}.png"
 
 
+def _norm(name):
+    """Normalize a unit name for icon lookup: lowercase, alphanumerics only."""
+    return "".join(ch for ch in name.lower() if ch.isalnum())
+
+
+# Unit icons scraped from coc.guide's index pages (their filenames are legacy
+# internal names - e.g. Rage Spell is haste.png - so this is an explicit map,
+# not a slug pattern). Units missing here (e.g. pets) just render without an
+# icon via the onerror fallback.
+_UNIT_ICON_RAW = {
+    # home troops
+    "Barbarian": "troop/barbarian", "Archer": "troop/archer",
+    "Giant": "troop/giant", "Goblin": "troop/goblin",
+    "Wall Breaker": "troop/wall-breaker", "Balloon": "troop/balloon",
+    "Wizard": "troop/wizard", "Healer": "troop/healer",
+    "Dragon": "troop/dragon", "P.E.K.K.A": "troop/pekka",
+    "Baby Dragon": "troop/babydragon", "Miner": "troop/miner",
+    "Electro Dragon": "troop/electro-dragon", "Yeti": "troop/yeti",
+    "Dragon Rider": "troop/dragon-rider", "Electro Titan": "troop/electro-titan",
+    "Root Rider": "troop/root-rider", "Thrower": "troop/thrower",
+    "Minion": "troop/gargoyle", "Hog Rider": "troop/boar-rider",
+    "Valkyrie": "troop/warrior-girl", "Golem": "troop/golem",
+    "Witch": "troop/warlock", "Lava Hound": "troop/airdefenceseeker",
+    "Bowler": "troop/bowler", "Ice Golem": "troop/ice-golem",
+    "Headhunter": "troop/headhunter", "Apprentice Warden": "troop/apprentice-warden",
+    "Druid": "troop/druid_healer", "Firecracker": "troop/firecracker",
+    "Ice Minion": "troop/ice-minion", "Skeleton Barrel": "troop/skeleton-barrel",
+    "Snake Barrel": "troop/snake-barrel",
+    # siege machines
+    "Wall Wrecker": "troop/siege-machine-ram",
+    "Battle Blimp": "troop/siege-machine-flyer",
+    "Stone Slammer": "troop/siege-bowler-balloon",
+    "Siege Barracks": "troop/siege-machine-carrier",
+    "Log Launcher": "troop/siege-log-launcher",
+    "Flame Flinger": "troop/siege-catapult",
+    "Battle Drill": "troop/battle-drill",
+    # spells
+    "Lightning Spell": "spell/lighningstorm", "Healing Spell": "spell/healingwave",
+    "Rage Spell": "spell/haste", "Jump Spell": "spell/jump",
+    "Freeze Spell": "spell/freeze", "Clone Spell": "spell/duplicate",
+    "Invisibility Spell": "spell/invisibility", "Recall Spell": "spell/recall",
+    "Revive Spell": "spell/revive", "Poison Spell": "spell/poison",
+    "Earthquake Spell": "spell/earthquake", "Haste Spell": "spell/speedup",
+    "Skeleton Spell": "spell/spawnskele", "Bat Spell": "spell/spawnbats",
+    "Overgrowth Spell": "spell/overgrowth",
+}
+UNIT_ICONS = {_norm(k): f"https://coc.guide/static/imgs/{v}.png"
+              for k, v in _UNIT_ICON_RAW.items()}
+
+
 def fetch(path, key):
     url = API_BASE + path
     req = urllib.request.Request(url, headers={
@@ -569,11 +619,13 @@ CSS = """
                   gap:9px; margin-bottom:16px; }
   .unit-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(128px,1fr));
                gap:6px; }
-  .unit { display:flex; justify-content:space-between; gap:8px;
+  .unit { display:flex; align-items:center; gap:7px;
           background:var(--card-2); border:1px solid var(--line);
-          border-radius:8px; padding:5px 10px; font-size:11.5px; }
+          border-radius:8px; padding:5px 9px; font-size:11.5px; }
+  .unit img.ui { width:22px; height:22px; object-fit:contain; flex:none;
+                 filter:drop-shadow(0 1px 3px rgba(0,0,0,.5)); }
   .unit .un { white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-              color:var(--ink-2); }
+              color:var(--ink-2); flex:1; }
   .unit .ul { font-variant-numeric:tabular-nums; color:var(--ink); flex:none; }
   .unit.maxed { border-color:rgba(72,184,101,.35); }
   .unit.maxed .ul { color:var(--green); font-weight:600; }
@@ -927,9 +979,13 @@ PAGE_JS = """
     if (!heroesHtml) heroesHtml = '<p class="quiet">No hero data available.</p>';
     function unitGrid(units) {
       if (!units || !units.length) return '<p class="quiet">No data available.</p>';
+      const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
       return '<div class="unit-grid">' + units.map(u => {
         const maxed = u.l >= u.m ? ' maxed' : '';
-        return `<div class="unit${maxed}"><span class="un">${escj(u.n)}</span>` +
+        const src = UICONS[norm(u.n)];
+        const icon = src ? `<img class="ui" src="${src}" alt="" loading="lazy" ` +
+                           `onerror="this.style.display='none'">` : '';
+        return `<div class="unit${maxed}">${icon}<span class="un">${escj(u.n)}</span>` +
                `<span class="ul">${u.l}/${u.m}</span></div>`;
       }).join('') + '</div>';
     }
@@ -1702,7 +1758,8 @@ def build_page(data, live_seconds=None):
 
 <footer>{footer_html}</footer>
 {INFO_MODAL}
-<script>const MEMBERS = {members_json};</script>
+<script>const MEMBERS = {members_json};
+const UICONS = {json.dumps(UNIT_ICONS)};</script>
 <script>{PAGE_JS}{live_js}</script>
 </body></html>"""
 
