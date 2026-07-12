@@ -1,0 +1,5 @@
+dashboard.html
+manifest.json
+__pycache__/
+*.pyc
+coc-key.txt
