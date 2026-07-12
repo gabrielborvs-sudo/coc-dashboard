@@ -34,15 +34,25 @@ TH_ICON = "https://www.clash.ninja/images/entities/1_{n}.png"
 
 def fetch(path, key):
     url = API_BASE + path
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {key}",
+        "Accept": "application/json",
+        # A real UA matters: Cloudflare blocks default Python-urllib from
+        # datacenter IPs, which breaks proxy calls from cloud hosts.
+        "User-Agent": "coc-clan-dashboard/1.0 (+https://github.com/gabrielborvs-sudo/coc-dashboard)",
+    })
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             return json.load(r), None
     except urllib.error.HTTPError as e:
         try:
-            reason = json.load(e).get("reason", "")
+            body = e.read().decode("utf-8", "replace")
         except Exception:
-            reason = ""
+            body = ""
+        try:
+            reason = json.loads(body).get("reason", "")
+        except Exception:
+            reason = body[:150].strip()   # surface non-JSON blocks (e.g. Cloudflare)
         return None, f"{e.code} {reason}"
     except Exception as e:
         return None, str(e)
