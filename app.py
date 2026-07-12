@@ -50,13 +50,42 @@ def _render():
     return d.build_page(data, live_seconds=RELOAD_SECONDS)
 
 
-def _get_page():
+def _get_page(force=False):
     now = time.time()
     with _lock:
-        if _cache["html"] is None or now - _cache["at"] >= CACHE_SECONDS:
-            _cache["html"] = _render()
-            _cache["at"] = now
-        return _cache["html"]
+        fresh = (_cache["html"] is not None
+                 and now - _cache["at"] < CACHE_SECONDS)
+        if fresh and not force:
+            return _cache["html"]
+        if _cache.get("refreshing") and _cache["html"] is not None:
+            return _cache["html"]      # serve current copy while a refresh runs
+        _cache["refreshing"] = True
+    try:
+        html = _render()               # network calls happen outside the lock
+        with _lock:
+            _cache["html"] = html
+            _cache["at"] = time.time()
+    finally:
+        with _lock:
+            _cache["refreshing"] = False
+    return html
+
+
+def _poller():
+    """Background auto-refresh: re-fetch from the CoC API every CACHE_SECONDS,
+    even with no visitors, so every page load hits a warm, fresh cache.
+    (Note: on Render's free tier the whole instance sleeps without traffic -
+    pair with an uptime pinger on /healthz to poll 24/7.)"""
+    while True:
+        try:
+            _get_page(force=True)
+        except Exception:
+            pass                       # never let a bad cycle kill the poller
+        time.sleep(CACHE_SECONDS)
+
+
+if os.environ.get("AUTO_POLL", "1") != "0":
+    threading.Thread(target=_poller, daemon=True).start()
 
 
 def app(environ, start_response):
