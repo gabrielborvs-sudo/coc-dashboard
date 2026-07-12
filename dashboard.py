@@ -709,12 +709,33 @@ CSS = """
   .hi-stars { font-size:13px; font-variant-numeric:tabular-nums; }
   .hi-stars .res { margin-left:5px; font-size:9.5px; padding:2px 7px; }
 
+  /* ---------- mobile war-roster cards ---------- */
+  .rlist { display:none; }
+  .ritem { display:flex; align-items:flex-start; gap:10px;
+           padding:10px 4px 10px 8px; border-bottom:1px solid var(--line); }
+  .ritem:last-child { border-bottom:none; }
+  .ritem > .rk { width:18px; text-align:right; flex:none; font-size:12px;
+                 margin-top:2px; }
+  .ri-main { flex:1; min-width:0; }
+  .ri-atks { display:flex; flex-wrap:wrap; gap:3px 16px; margin-top:4px;
+             font-size:12px; }
+  .ratt { white-space:nowrap; }
+  .ri-status { flex:none; margin-top:2px; }
+  .ritem.rst-full { background:rgba(72,184,101,.07);
+                    box-shadow:inset 3px 0 0 var(--green); }
+  .ritem.rst-part { background:rgba(232,163,61,.07);
+                    box-shadow:inset 3px 0 0 var(--accent); }
+  .ritem.rst-none { background:rgba(224,96,96,.08);
+                    box-shadow:inset 3px 0 0 var(--red); }
+
   /* phones: swap wide tables for card lists - no sideways scrolling */
   @media (max-width:620px) {
     .members-desktop { display:none; }
     .mlist { display:block; }
     .hist-desktop { display:none; }
     .hlist { display:block; }
+    .roster-desktop { display:none; }
+    .rlist { display:block; }
   }
   /* thin, unobtrusive scrollbar for the tables that still scroll (war roster) */
   .table-scroll::-webkit-scrollbar { height:5px; }
@@ -1204,7 +1225,17 @@ def build_page(data, live_seconds=None):
                     f'<span class="att-pct">{a["destructionPercentage"]}%</span>'
                     f'<div class="att-target">vs {target}</div></td>')
 
+        def attack_span(a, idx):
+            if a is None:
+                return f'<span class="ratt att-empty">A{idx}: &mdash;</span>'
+            d = them_map.get(a["defenderTag"], {})
+            target = f'#{d.get("mapPosition", "?")} TH{d.get("townhallLevel", "?")}'
+            return (f'<span class="ratt att st{a["stars"]}">{stars_str(a["stars"])} '
+                    f'<span class="att-pct">{a["destructionPercentage"]}%</span> '
+                    f'<span class="att-target">vs {target}</span></span>')
+
         roster_rows = []
+        roster_cards = []
         for m in sorted(us.get("members", []), key=lambda x: x["mapPosition"]):
             atks = sorted(m.get("attacks", []), key=lambda a: a.get("order", 0))
             cells = "".join(attack_cell(atks[i] if i < len(atks) else None)
@@ -1212,20 +1243,36 @@ def build_page(data, live_seconds=None):
             used = len(atks)
             if state == "preparation":
                 status = '<span class="status-wait">prep</span>'
-                row_cls = ''
+                row_name = ''
             elif used == per_member:
                 status = '<span class="status-done">&#10003; done</span>'
-                row_cls = ' class="rst-full"'
+                row_name = 'rst-full'
             elif state == "warEnded":
                 status = f'<span class="status-missed">{per_member - used} unused</span>'
-                row_cls = ' class="rst-part"' if used else ' class="rst-none"'
+                row_name = 'rst-part' if used else 'rst-none'
             else:
                 status = f'<span class="status-left">{per_member - used} left</span>'
-                row_cls = ' class="rst-part"' if used else ' class="rst-none"'
+                row_name = 'rst-part' if used else 'rst-none'
+            row_cls = f' class="{row_name}"' if row_name else ''
             roster_rows.append(
                 f'<tr{row_cls}><td class="num">{m["mapPosition"]}</td>'
                 f'<td>{esc(m["name"])}<div class="att-target">TH{m.get("townhallLevel", "?")}</div></td>'
                 f'{cells}<td class="num">{status}</td></tr>')
+
+            if state == "preparation":
+                atk_line = ''
+            else:
+                spans = ''.join(attack_span(atks[i] if i < len(atks) else None, i + 1)
+                                for i in range(per_member))
+                atk_line = f'<div class="ri-atks">{spans}</div>'
+            card_cls = f' {row_name}' if row_name else ''
+            roster_cards.append(
+                f'<div class="ritem{card_cls}">'
+                f'<span class="rk">{m["mapPosition"]}</span>'
+                f'<div class="ri-main"><div class="mi-name">{esc(m["name"])} '
+                f'<span class="att-target">TH{m.get("townhallLevel", "?")}</span></div>'
+                f'{atk_line}</div>'
+                f'<div class="ri-status">{status}</div></div>')
 
         atk_heads = "".join(f'<th>Attack {i + 1}</th>' for i in range(per_member))
         legend = ""
@@ -1240,12 +1287,14 @@ def build_page(data, live_seconds=None):
                       '<span class="c-red">0&#9733;</span></p>')
         roster_html = f"""
         <div class="card"><h2>Attack roster &mdash; {esc(us["name"])}</h2>
-        <div class="table-scroll">
+        <div class="table-scroll roster-desktop">
         <table class="roster">
           <thead><tr><th class="num">#</th><th>Member</th>{atk_heads}<th class="num">Status</th></tr></thead>
           <tbody>{''.join(roster_rows)}</tbody>
         </table>
-        </div>{legend}</div>"""
+        </div>
+        <div class="rlist">{''.join(roster_cards)}</div>
+        {legend}</div>"""
 
         def side(c, cls):
             badge_img = c.get("badgeUrls", {}).get("small", "")
