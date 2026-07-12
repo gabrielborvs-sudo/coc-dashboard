@@ -567,6 +567,16 @@ CSS = """
   .detail-close:hover { color:var(--ink); background:var(--card-2); }
   .detail-tiles { display:grid; grid-template-columns:repeat(3,1fr);
                   gap:9px; margin-bottom:16px; }
+  .unit-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(128px,1fr));
+               gap:6px; }
+  .unit { display:flex; justify-content:space-between; gap:8px;
+          background:var(--card-2); border:1px solid var(--line);
+          border-radius:8px; padding:5px 10px; font-size:11.5px; }
+  .unit .un { white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+              color:var(--ink-2); }
+  .unit .ul { font-variant-numeric:tabular-nums; color:var(--ink); flex:none; }
+  .unit.maxed { border-color:rgba(72,184,101,.35); }
+  .unit.maxed .ul { color:var(--green); font-weight:600; }
   @media (max-width:640px) { .detail-tiles { grid-template-columns:repeat(2,1fr); } }
 
   footer { color:var(--muted); font-size:11.5px; margin-top:18px; text-align:center; }
@@ -915,6 +925,14 @@ PAGE_JS = """
         `<span class="hero-lvl"><b>${h.level}</b> / ${h.max}</span></div>`;
     });
     if (!heroesHtml) heroesHtml = '<p class="quiet">No hero data available.</p>';
+    function unitGrid(units) {
+      if (!units || !units.length) return '<p class="quiet">No data available.</p>';
+      return '<div class="unit-grid">' + units.map(u => {
+        const maxed = u.l >= u.m ? ' maxed' : '';
+        return `<div class="unit${maxed}"><span class="un">${escj(u.n)}</span>` +
+               `<span class="ul">${u.l}/${u.m}</span></div>`;
+      }).join('') + '</div>';
+    }
     box.innerHTML =
       `<div class="detail-head">` + thImg(m.th, 46) +
       `<div><div class="n">${escj(m.name)}</div>` +
@@ -929,7 +947,9 @@ PAGE_JS = """
       tile(fmt(m.received), 'Received', 'season', '--blue') +
       tile(ratio, 'Give / take', 'ratio', '--green') +
       tile(fmt(m.capital), 'Capital gold', 'all-time', '--orange') +
-      `</div><h2>Heroes</h2>` + heroesHtml;
+      `</div><h2>Heroes</h2>` + heroesHtml +
+      `<h2 style="margin-top:20px">Troops</h2>` + unitGrid(m.troops) +
+      `<h2 style="margin-top:20px">Spells</h2>` + unitGrid(m.spells);
     box.style.display = 'block';
     box.scrollIntoView({ behavior:'smooth', block:'start' });
   }
@@ -1087,8 +1107,15 @@ def _member_payload(m, profiles):
         "xp": m.get("expLevel", 0), "th": m.get("townHallLevel", 0),
         "best": m["trophies"], "warStars": 0, "capital": 0,
         "league": (m.get("league") or {}).get("name", ""), "heroes": [],
+        "troops": [], "spells": [],
     }
     if p:
+        def unit_list(key):
+            return [{"n": u["name"], "l": u["level"], "m": u["maxLevel"]}
+                    for u in p.get(key, [])
+                    if u.get("village") == "home"
+                    and u["name"] not in SUPER_TROOPS
+                    and not u["name"].startswith("Super ")]
         base.update({
             "th": p.get("townHallLevel", base["th"]),
             "xp": p.get("expLevel", base["xp"]),
@@ -1097,6 +1124,8 @@ def _member_payload(m, profiles):
             "capital": p.get("clanCapitalContributions", 0),
             "heroes": [{"name": h["name"], "level": h["level"], "max": h["maxLevel"]}
                        for h in p.get("heroes", []) if h.get("village") == "home"],
+            "troops": unit_list("troops"),
+            "spells": unit_list("spells"),
         })
     base["rush"] = rush_score(base["th"], p)
     return base
