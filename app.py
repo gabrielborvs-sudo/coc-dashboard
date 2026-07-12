@@ -96,14 +96,25 @@ def app(environ, start_response):
                                   ("Content-Length", str(len(body)))])
         return [body]
     if path == "/sw.js":
-        # Minimal service worker: makes the site installable; no caching so
-        # war data always comes fresh from the server.
-        body = (b"self.addEventListener('install',e=>self.skipWaiting());"
+        # Service worker: cache-first for images and fonts (icons load once,
+        # then serve instantly from device storage forever). HTML and API
+        # data are deliberately NOT cached - war data must stay fresh.
+        body = (b"const C='wr-static-v1';"
+                b"self.addEventListener('install',e=>self.skipWaiting());"
                 b"self.addEventListener('activate',e=>self.clients.claim());"
-                b"self.addEventListener('fetch',()=>{});")
+                b"self.addEventListener('fetch',e=>{"
+                b"const r=e.request;if(r.method!=='GET')return;"
+                b"const u=new URL(r.url);"
+                b"const img=/\\.(png|jpe?g|webp|gif|ico)$/i.test(u.pathname);"
+                b"const font=u.hostname==='fonts.googleapis.com'||u.hostname==='fonts.gstatic.com';"
+                b"if(!img&&!font)return;"
+                b"e.respondWith(caches.open(C).then(c=>c.match(r).then(hit=>hit||"
+                b"fetch(r).then(res=>{if(res&&(res.ok||res.type==='opaque'))"
+                b"c.put(r,res.clone());return res;}))));"
+                b"});")
         start_response("200 OK", [("Content-Type", "text/javascript"),
                                   ("Content-Length", str(len(body))),
-                                  ("Cache-Control", "public, max-age=86400")])
+                                  ("Cache-Control", "no-cache")])
         return [body]
     if path == "/manifest.json":
         _get_page()                     # ensure the manifest is built

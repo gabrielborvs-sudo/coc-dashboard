@@ -1093,6 +1093,19 @@ PAGE_JS = """
   document.querySelectorAll('[data-info]').forEach(el =>
     el.addEventListener('click', e => { e.stopPropagation(); openInfo(); }));
 
+  // ---------------- icon cache warm-up ----------------
+  // Preload every unit/TH icon shortly after page load, so member profiles
+  // open instantly. Combined with the service worker's cache-first strategy,
+  // each icon is downloaded exactly once per device, ever.
+  setTimeout(() => {
+    const urls = new Set(Object.values(UICONS));
+    Object.values(MEMBERS).forEach(m => {
+      if (typeof m.th === 'number')
+        urls.add(`https://www.clash.ninja/images/entities/1_${m.th}.png`);
+    });
+    urls.forEach(u => { const im = new Image(); im.src = u; });
+  }, 1500);
+
   // ---------------- install app button ----------------
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0)
     navigator.serviceWorker.register('sw.js').catch(() => {});
