@@ -610,8 +610,15 @@ CSS = """
   .cmp-vs { font-family:var(--display); font-weight:700; font-size:11px;
             letter-spacing:1px; color:var(--muted);
             border:1px solid var(--line-2); border-radius:7px; padding:6px 9px; }
-  .cmp-table td:first-child { color:var(--ink-2); font-size:12px; }
-  .cmp-table td { width:33%; }
+  .cmp-table { table-layout:fixed; width:100%; }
+  .cmp-table th:first-child, .cmp-table .cl { width:30%; }
+  .cmp-table .cl { color:var(--ink-2); font-size:12px;
+                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cmp-table .cv { text-align:center; font-variant-numeric:tabular-nums; }
+  .cmp-h { text-align:center; padding-bottom:10px; }
+  .cmp-h .th-av { display:block; margin:0 auto 5px; }
+  .cmp-hname { font-size:10.5px; letter-spacing:.6px; color:var(--ink);
+               white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .cmp-win { color:var(--green); font-weight:700; }
 
   /* ---------- history & capital ---------- */
@@ -919,10 +926,10 @@ PAGE_JS = """
       let ca = '', cb = '';
       if (va != null && vb != null && va !== vb) {
         const aWins = lowerWins ? va < vb : va > vb;
-        ca = aWins ? ' class="num cmp-win"' : ' class="num"';
-        cb = aWins ? ' class="num"' : ' class="num cmp-win"';
-      } else { ca = cb = ' class="num"'; }
-      return `<tr><td>${label}</td><td${ca}>${disp(va)}</td><td${cb}>${disp(vb)}</td></tr>`;
+        ca = aWins ? ' class="cv cmp-win"' : ' class="cv"';
+        cb = aWins ? ' class="cv"' : ' class="cv cmp-win"';
+      } else { ca = cb = ' class="cv"'; }
+      return `<tr><td class="cl">${label}</td><td${ca}>${disp(va)}</td><td${cb}>${disp(vb)}</td></tr>`;
     }
 
     function renderCmp() {
@@ -953,11 +960,11 @@ PAGE_JS = """
           rows += cmpRow(n, ha[n] ?? null, hb[n] ?? null, num);
       });
       cmpOut.innerHTML =
-        `<div class="table-scroll"><table class="cmp-table">` +
+        `<table class="cmp-table">` +
         `<thead><tr><th></th>` +
-        `<th class="num">${thImg(a.th, 22)}${escj(a.name)}</th>` +
-        `<th class="num">${thImg(b.th, 22)}${escj(b.name)}</th></tr></thead>` +
-        `<tbody>${rows}</tbody></table></div>`;
+        `<th class="cmp-h">${thImg(a.th, 32)}<div class="cmp-hname">${escj(a.name)}</div></th>` +
+        `<th class="cmp-h">${thImg(b.th, 32)}<div class="cmp-hname">${escj(b.name)}</div></th></tr></thead>` +
+        `<tbody>${rows}</tbody></table>`;
     }
     selA.addEventListener('change', renderCmp);
     selB.addEventListener('change', renderCmp);
