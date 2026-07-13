@@ -33,6 +33,12 @@ API_BASE = os.environ.get("COC_API_BASE", "https://api.clashofclans.com/v1")
 # appears if an image is missing or the CDN is offline.
 TH_ICON = "https://www.clash.ninja/images/entities/1_{n}.png"
 
+# In-game deep link + pre-rendered QR (regenerate the SVG if CLAN_TAG changes)
+JOIN_LINK = ("https://link.clashofclans.com/en?action=OpenClanProfile&tag="
+             + CLAN_TAG.lstrip("#"))
+_QR_FILE = Path(__file__).resolve().parent / "join_qr.svg"
+JOIN_QR = _QR_FILE.read_text(encoding="ascii") if _QR_FILE.exists() else ""
+
 
 def _norm(name):
     """Normalize a unit name for icon lookup: lowercase, alphanumerics only."""
@@ -467,6 +473,23 @@ CSS = """
   .abt-quote { position:absolute; right:16px; top:-26px; font-size:120px;
                font-family:var(--display); color:var(--ink); opacity:.05;
                pointer-events:none; line-height:1; user-select:none; }
+  .join-row { display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+              margin-top:16px; padding-top:16px;
+              border-top:1px solid var(--line); }
+  .join-btn { display:inline-flex; align-items:center; gap:9px;
+              font-family:var(--display); font-weight:700; font-size:14px;
+              letter-spacing:.4px; color:#1a1206; text-decoration:none;
+              background:linear-gradient(180deg, #f2c86e, #e8a33d);
+              border:1px solid rgba(242,212,145,.55); border-radius:10px;
+              padding:12px 24px; box-shadow:0 6px 18px rgba(232,163,61,.22);
+              transition:transform .15s, box-shadow .15s; }
+  .join-btn:hover { transform:translateY(-2px);
+                    box-shadow:0 10px 26px rgba(232,163,61,.34); }
+  .join-qr { display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .join-qr .qr { width:98px; height:98px; background:#fff; border-radius:10px;
+                 padding:8px; box-sizing:border-box; display:block; }
+  .join-qr span { font-size:9.5px; color:var(--muted); letter-spacing:.9px;
+                  text-transform:uppercase; }
 
   /* ---------- tabs ---------- */
   nav {
@@ -2271,13 +2294,16 @@ def build_page(data, live_seconds=None):
         img = f'<img class="al" src="{esc(ic)}" alt="" loading="lazy">' if ic else ''
         abt_chips.append(f'<span class="abt-chip">{img}{esc(lb.get("name", ""))}</span>')
 
-    about_html = ""
-    if desc or abt_chips:
-        d_html = f'<p class="abt-desc">{desc}</p>' if desc else ''
-        chips_row = (f'<div class="abt-chips">{"".join(abt_chips)}</div>'
-                     if abt_chips else '')
-        about_html = (f'<div class="card abt"><h2>About</h2>{d_html}{chips_row}'
-                      f'<span class="abt-quote">&#8221;</span></div>')
+    d_html = f'<p class="abt-desc">{desc}</p>' if desc else ''
+    chips_row = (f'<div class="abt-chips">{"".join(abt_chips)}</div>'
+                 if abt_chips else '')
+    qr_html = (f'<div class="join-qr">{JOIN_QR}'
+               f'<span>scan to open in game</span></div>') if JOIN_QR else ''
+    join_row = (f'<div class="join-row">'
+                f'<a class="join-btn" href="{esc(JOIN_LINK)}" target="_blank" '
+                f'rel="noopener">&#9876; Join {esc(clan_name)}</a>{qr_html}</div>')
+    about_html = (f'<div class="card abt"><h2>About</h2>{d_html}{chips_row}'
+                  f'{join_row}<span class="abt-quote">&#8221;</span></div>')
 
     global LAST_MANIFEST
     LAST_MANIFEST = build_manifest(clan)
