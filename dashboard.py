@@ -543,6 +543,12 @@ CSS = """
                     border-color:color-mix(in srgb, var(--tint) 50%, transparent);
                     background:color-mix(in srgb, var(--tint) 13%, transparent); }
   .sortbtn .dir { font-weight:700; }
+  /* war roster team/enemy switch */
+  .roster-head { display:flex; align-items:center; justify-content:space-between;
+                 gap:8px 14px; flex-wrap:wrap; }
+  .rseg { display:flex; gap:6px; margin-bottom:14px; }
+  .rseg .sortbtn { max-width:44vw; overflow:hidden; text-overflow:ellipsis;
+                   white-space:nowrap; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th { text-align:left; color:var(--muted); font-weight:600; font-size:10.5px;
        text-transform:uppercase; letter-spacing:1.2px;
@@ -1093,6 +1099,26 @@ PAGE_JS = """
   document.querySelectorAll('[data-info]').forEach(el =>
     el.addEventListener('click', e => { e.stopPropagation(); openInfo(); }));
 
+  // ---------------- war roster: team / enemy switch ----------------
+  // Defaults to our team; the choice survives the live auto-reload.
+  const segUs = document.getElementById('rseg-us'),
+        segThem = document.getElementById('rseg-them');
+  if (segUs && segThem) {
+    const showSide = mine => {
+      document.getElementById('roster-us').hidden = !mine;
+      document.getElementById('roster-them').hidden = mine;
+      segUs.classList.toggle('active', mine);
+      segThem.classList.toggle('active', !mine);
+      try { sessionStorage.setItem('wr-roster-side', mine ? 'us' : 'them'); }
+      catch (e) {}
+    };
+    segUs.addEventListener('click', () => showSide(true));
+    segThem.addEventListener('click', () => showSide(false));
+    try {
+      if (sessionStorage.getItem('wr-roster-side') === 'them') showSide(false);
+    } catch (e) {}
+  }
+
   // ---------------- icon cache warm-up ----------------
   // Preload every unit/TH icon shortly after page load, so member profiles
   // open instantly. Combined with the service worker's cache-first strategy,
@@ -1309,68 +1335,75 @@ def build_page(data, live_seconds=None):
                                  f'{"s" if len(pend) != 1 else ""} with attacks left:</strong> {items}</div>')
 
         them_map = {m["tag"]: m for m in them.get("members", [])}
+        us_map = {m["tag"]: m for m in us.get("members", [])}
 
         def stars_str(n):
             return ('<span class="st">' + "&#9733;" * n + "</span>"
                     + '<span class="st-off">' + "&#9734;" * (3 - n) + "</span>")
 
-        def attack_cell(a):
+        def attack_cell(a, dmap):
             if a is None:
                 return '<td class="att att-empty">&mdash;</td>'
-            d = them_map.get(a["defenderTag"], {})
+            d = dmap.get(a["defenderTag"], {})
             target = f'#{d.get("mapPosition", "?")} TH{d.get("townhallLevel", "?")}'
             return (f'<td class="att st{a["stars"]}">{stars_str(a["stars"])} '
                     f'<span class="att-pct">{a["destructionPercentage"]}%</span>'
                     f'<div class="att-target">vs {target}</div></td>')
 
-        def attack_span(a, idx):
+        def attack_span(a, idx, dmap):
             if a is None:
                 return f'<span class="ratt att-empty">A{idx}: &mdash;</span>'
-            d = them_map.get(a["defenderTag"], {})
+            d = dmap.get(a["defenderTag"], {})
             target = f'#{d.get("mapPosition", "?")} TH{d.get("townhallLevel", "?")}'
             return (f'<span class="ratt att st{a["stars"]}">{stars_str(a["stars"])} '
                     f'<span class="att-pct">{a["destructionPercentage"]}%</span> '
                     f'<span class="att-target">vs {target}</span></span>')
 
-        roster_rows = []
-        roster_cards = []
-        for m in sorted(us.get("members", []), key=lambda x: x["mapPosition"]):
-            atks = sorted(m.get("attacks", []), key=lambda a: a.get("order", 0))
-            cells = "".join(attack_cell(atks[i] if i < len(atks) else None)
-                            for i in range(per_member))
-            used = len(atks)
-            if state == "preparation":
-                status = '<span class="status-wait">prep</span>'
-                row_name = ''
-            elif used == per_member:
-                status = '<span class="status-done">&#10003; done</span>'
-                row_name = 'rst-full'
-            elif state == "warEnded":
-                status = f'<span class="status-missed">{per_member - used} unused</span>'
-                row_name = 'rst-part' if used else 'rst-none'
-            else:
-                status = f'<span class="status-left">{per_member - used} left</span>'
-                row_name = 'rst-part' if used else 'rst-none'
-            row_cls = f' class="{row_name}"' if row_name else ''
-            roster_rows.append(
-                f'<tr{row_cls}><td class="num">{m["mapPosition"]}</td>'
-                f'<td>{esc(m["name"])}<div class="att-target">TH{m.get("townhallLevel", "?")}</div></td>'
-                f'{cells}<td class="num">{status}</td></tr>')
-
-            if state == "preparation":
-                atk_line = ''
-            else:
-                spans = ''.join(attack_span(atks[i] if i < len(atks) else None, i + 1)
+        def build_roster(side, dmap):
+            """Table rows + mobile cards for one clan's attack roster.
+            dmap maps defender tags to the OTHER side's members."""
+            rows, cards = [], []
+            for m in sorted(side.get("members", []), key=lambda x: x["mapPosition"]):
+                atks = sorted(m.get("attacks", []), key=lambda a: a.get("order", 0))
+                cells = "".join(attack_cell(atks[i] if i < len(atks) else None, dmap)
                                 for i in range(per_member))
-                atk_line = f'<div class="ri-atks">{spans}</div>'
-            card_cls = f' {row_name}' if row_name else ''
-            roster_cards.append(
-                f'<div class="ritem{card_cls}">'
-                f'<span class="rk">{m["mapPosition"]}</span>'
-                f'<div class="ri-main"><div class="mi-name">{esc(m["name"])} '
-                f'<span class="att-target">TH{m.get("townhallLevel", "?")}</span></div>'
-                f'{atk_line}</div>'
-                f'<div class="ri-status">{status}</div></div>')
+                used = len(atks)
+                if state == "preparation":
+                    status = '<span class="status-wait">prep</span>'
+                    row_name = ''
+                elif used == per_member:
+                    status = '<span class="status-done">&#10003; done</span>'
+                    row_name = 'rst-full'
+                elif state == "warEnded":
+                    status = f'<span class="status-missed">{per_member - used} unused</span>'
+                    row_name = 'rst-part' if used else 'rst-none'
+                else:
+                    status = f'<span class="status-left">{per_member - used} left</span>'
+                    row_name = 'rst-part' if used else 'rst-none'
+                row_cls = f' class="{row_name}"' if row_name else ''
+                rows.append(
+                    f'<tr{row_cls}><td class="num">{m["mapPosition"]}</td>'
+                    f'<td>{esc(m["name"])}<div class="att-target">TH{m.get("townhallLevel", "?")}</div></td>'
+                    f'{cells}<td class="num">{status}</td></tr>')
+
+                if state == "preparation":
+                    atk_line = ''
+                else:
+                    spans = ''.join(attack_span(atks[i] if i < len(atks) else None, i + 1, dmap)
+                                    for i in range(per_member))
+                    atk_line = f'<div class="ri-atks">{spans}</div>'
+                card_cls = f' {row_name}' if row_name else ''
+                cards.append(
+                    f'<div class="ritem{card_cls}">'
+                    f'<span class="rk">{m["mapPosition"]}</span>'
+                    f'<div class="ri-main"><div class="mi-name">{esc(m["name"])} '
+                    f'<span class="att-target">TH{m.get("townhallLevel", "?")}</span></div>'
+                    f'{atk_line}</div>'
+                    f'<div class="ri-status">{status}</div></div>')
+            return rows, cards
+
+        team_rows, team_cards = build_roster(us, them_map)
+        foe_rows, foe_cards = build_roster(them, us_map)
 
         atk_heads = "".join(f'<th>Attack {i + 1}</th>' for i in range(per_member))
         legend = ""
@@ -1383,15 +1416,21 @@ def build_page(data, live_seconds=None):
                       '<span style="color:var(--gold)">2&#9733;</span> &middot; '
                       '<span style="color:var(--orange)">1&#9733;</span> &middot; '
                       '<span class="c-red">0&#9733;</span></p>')
+        def roster_block(rows, cards):
+            return (f'<div class="table-scroll roster-desktop"><table class="roster">'
+                    f'<thead><tr><th class="num">#</th><th>Member</th>{atk_heads}'
+                    f'<th class="num">Status</th></tr></thead>'
+                    f'<tbody>{"".join(rows)}</tbody></table></div>'
+                    f'<div class="rlist">{"".join(cards)}</div>')
+
         roster_html = f"""
-        <div class="card"><h2>Attack roster &mdash; {esc(us["name"])}</h2>
-        <div class="table-scroll roster-desktop">
-        <table class="roster">
-          <thead><tr><th class="num">#</th><th>Member</th>{atk_heads}<th class="num">Status</th></tr></thead>
-          <tbody>{''.join(roster_rows)}</tbody>
-        </table>
-        </div>
-        <div class="rlist">{''.join(roster_cards)}</div>
+        <div class="card"><div class="roster-head"><h2>Attack roster</h2>
+        <div class="rseg">
+          <button id="rseg-us" class="sortbtn active" style="--tint:var(--green)"><span class="si">&#9876;</span>{esc(us["name"])}</button>
+          <button id="rseg-them" class="sortbtn" style="--tint:var(--red)"><span class="si">&#128737;</span>{esc(them["name"])}</button>
+        </div></div>
+        <div id="roster-us">{roster_block(team_rows, team_cards)}</div>
+        <div id="roster-them" hidden>{roster_block(foe_rows, foe_cards)}</div>
         {legend}</div>"""
 
         def side(c, cls):
