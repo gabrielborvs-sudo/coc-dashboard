@@ -385,6 +385,21 @@ CSS = """
             color:var(--accent); font-weight:600; margin-bottom:3px; }
   .who h1 { font-family:var(--display); font-size:30px; font-weight:700;
             letter-spacing:-.4px; line-height:1.1; }
+  /* slow golden shine sweeping the clan name every ~9s */
+  @supports (-webkit-background-clip:text) {
+    .who h1 {
+      background:linear-gradient(100deg, var(--ink) 0%, var(--ink) 42%,
+                 #f2d491 50%, var(--ink) 58%, var(--ink) 100%);
+      background-size:230% 100%; background-position:120% 0;
+      -webkit-background-clip:text; background-clip:text;
+      -webkit-text-fill-color:transparent;
+      animation:titleshine 9s ease-in-out infinite;
+    }
+  }
+  @keyframes titleshine {
+    0%, 55% { background-position:120% 0; }
+    90%, 100% { background-position:-70% 0; }
+  }
   .who .tag { color:var(--muted); font-size:12.5px; margin-top:3px;
               font-variant-numeric:tabular-nums; }
   .banner-right { margin-left:auto; text-align:right; flex:none; }
@@ -440,6 +455,13 @@ CSS = """
   /* ---------- stat tiles ---------- */
   .tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
   @media (max-width:640px) { .tiles { grid-template-columns:repeat(2,1fr); } }
+  /* staggered entrance on first load - subtle, one pass */
+  .tiles > .tile, .mvps > .mvp { animation:fadeUp .45s ease-out backwards; }
+  .tiles > .tile:nth-child(2), .mvps > .mvp:nth-child(2) { animation-delay:.06s; }
+  .tiles > .tile:nth-child(3) { animation-delay:.12s; }
+  .tiles > .tile:nth-child(4) { animation-delay:.18s; }
+  .tiles > .tile:nth-child(5) { animation-delay:.24s; }
+  .tiles > .tile:nth-child(6) { animation-delay:.30s; }
   .tile {
     background:var(--card-2); border:1px solid var(--line);
     border-radius:12px; padding:14px 16px;
@@ -469,6 +491,50 @@ CSS = """
   .mvp .v { margin-left:auto; font-family:var(--display); font-weight:700;
             font-size:19px; color:var(--accent);
             font-variant-numeric:tabular-nums; }
+
+  /* ---------- MVP effects: smolder for the donator, storm for the leader --- */
+  .mvp { position:relative; overflow:hidden;
+         transition:border-color .15s, transform .15s; }
+  .mvp:hover { transform:translateY(-2px); }
+  .mvp .vic { display:inline-block; margin-right:7px; font-size:14px; }
+  .mvp-fire { border-color:rgba(255,130,70,.30); }
+  .mvp-fire::before { content:''; position:absolute; right:-34px; bottom:-52px;
+    width:160px; height:115px; border-radius:50%; pointer-events:none;
+    background:radial-gradient(closest-side, rgba(255,118,45,.26), transparent 72%);
+    animation:smolder 3.4s ease-in-out infinite; }
+  .mvp-fire:hover { border-color:rgba(255,130,70,.55); }
+  .mvp-fire .v { color:#ff9757; text-shadow:0 0 16px rgba(255,120,45,.35); }
+  .mvp-fire .vic { transform-origin:50% 90%;
+    animation:flick 1.4s infinite ease-in-out;
+    filter:drop-shadow(0 0 5px rgba(255,140,0,.65)); }
+  .ember { position:absolute; bottom:-4px; width:4px; height:4px;
+    border-radius:50%; background:#ffb066; opacity:0; pointer-events:none;
+    box-shadow:0 0 6px 1px rgba(255,150,70,.55);
+    animation:ember 3.8s infinite ease-out; }
+  .ember.e1 { right:36px; }
+  .ember.e2 { right:70px; width:3px; height:3px; animation-delay:1.4s; }
+  .ember.e3 { right:104px; width:3px; height:3px; animation-delay:2.5s; }
+  @keyframes smolder { 50% { opacity:.5; transform:scale(1.14); } }
+  @keyframes ember {
+    0%   { opacity:0; transform:translateY(0) scale(1); }
+    12%  { opacity:.95; }
+    100% { opacity:0; transform:translateY(-58px) translateX(-9px) scale(.35); }
+  }
+  .mvp-bolt { border-color:rgba(232,194,90,.30); }
+  .mvp-bolt::before { content:''; position:absolute; top:0; bottom:0; left:-70%;
+    width:45%; transform:skewX(-18deg); pointer-events:none;
+    background:linear-gradient(90deg, transparent, rgba(232,194,90,.11), transparent);
+    animation:sheen 6.5s ease-in-out infinite; }
+  .mvp-bolt:hover { border-color:rgba(232,194,90,.55); }
+  .mvp-bolt .v { color:#e8c25a; text-shadow:0 0 16px rgba(232,194,90,.3); }
+  .mvp-bolt .vic { animation:boltflick 4.6s infinite;
+    filter:drop-shadow(0 0 6px rgba(255,224,130,.75)); }
+  @keyframes sheen { 0%, 55% { left:-70%; } 78%, 100% { left:135%; } }
+  @keyframes boltflick {
+    0%, 100% { opacity:1; }
+    6%  { opacity:.3; }  9%  { opacity:1; } 12% { opacity:.45; } 15% { opacity:1; }
+    52% { opacity:1; }  55% { opacity:.35; } 58% { opacity:1; }
+  }
 
   /* ---------- TH avatar ---------- */
   .th-av { display:inline-block; width:var(--s,30px); height:var(--s,30px);
@@ -531,7 +597,12 @@ CSS = """
                letter-spacing:1.5px; text-transform:uppercase;
                padding:6px 14px; border-radius:8px;
                border:1px solid var(--line-2); background:var(--card-2); }
-  .war-badge-live { color:var(--red); border-color:rgba(224,96,96,.45); }
+  .war-badge-live { color:var(--red); border-color:rgba(224,96,96,.45);
+                    animation:livepulse 2.4s ease-in-out infinite; }
+  @keyframes livepulse {
+    50% { box-shadow:0 0 14px rgba(224,96,96,.30);
+          border-color:rgba(224,96,96,.75); }
+  }
   .war-badge-won  { color:var(--green); }
   .war-badge-lost { color:var(--red); }
   .war-badge-prep { color:var(--accent); }
@@ -889,6 +960,14 @@ CSS = """
   .table-scroll::-webkit-scrollbar-track { background:transparent; }
   .table-scroll::-webkit-scrollbar-thumb { background:var(--card-3); border-radius:3px; }
   .table-scroll { scrollbar-width:thin; scrollbar-color:var(--card-3) transparent; }
+
+  /* accessibility: users who prefer reduced motion get a still page */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration:.01ms !important; animation-iteration-count:1 !important;
+      transition-duration:.01ms !important;
+    }
+  }
 """
 
 INFO_MODAL = """
@@ -1415,14 +1494,20 @@ def build_page(data, live_seconds=None):
     if members:
         top_d = members[0]
         top_t = max(clan["memberList"], key=lambda m: m["trophies"])
-        def mvp(title, m, value):
+        def mvp(title, m, value, fx="", ico=""):
             th = (_member_payload(m, profiles))["th"]
-            return (f'<div class="mvp">{th_avatar(th, 38)}'
+            embers = ('<span class="ember e1"></span><span class="ember e2"></span>'
+                      '<span class="ember e3"></span>') if fx == "mvp-fire" else ''
+            icon = f'<span class="vic">{ico}</span>' if ico else ''
+            cls = f' {fx}' if fx else ''
+            return (f'<div class="mvp{cls}">{embers}{th_avatar(th, 38)}'
                     f'<div><div class="t">{title}</div><div class="n">{esc(m["name"])}</div></div>'
-                    f'<div class="v">{value}</div></div>')
+                    f'<div class="v">{icon}{value}</div></div>')
         mvp_html = ('<div class="mvps">'
-                    + mvp("Top donator", top_d, f'{top_d["donations"]:,}')
-                    + mvp("Trophy leader", top_t, f'{top_t["trophies"]:,}')
+                    + mvp("Top donator", top_d, f'{top_d["donations"]:,}',
+                          fx="mvp-fire", ico="&#128293;")
+                    + mvp("Trophy leader", top_t, f'{top_t["trophies"]:,}',
+                          fx="mvp-bolt", ico="&#9889;")
                     + '</div>')
 
     # ------------------------------ war panel -------------------------------
