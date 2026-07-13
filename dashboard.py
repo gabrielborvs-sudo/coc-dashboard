@@ -153,8 +153,17 @@ def fetch_all(key):
             if cw:
                 war, w_err, cwl_round = cw, None, rnd
 
-    warlog, wl_err = fetch(f"/clans/{enc(CLAN_TAG)}/warlog?limit=12", key)
+    warlog, wl_err = fetch(f"/clans/{enc(CLAN_TAG)}/warlog?limit=20", key)
     raids, r_err = fetch(f"/clans/{enc(CLAN_TAG)}/capitalraidseasons?limit=6", key)
+
+    # scout the current opponent: public profile + war log (if not private)
+    opp_clan = opp_warlog = None
+    opp_wl_err = None
+    if war and war.get("state") != "notInWar":
+        otag = (war.get("opponent") or {}).get("tag")
+        if otag:
+            opp_clan, _ = fetch(f"/clans/{enc(otag)}", key)
+            opp_warlog, opp_wl_err = fetch(f"/clans/{enc(otag)}/warlog?limit=20", key)
 
     profiles = {}
     if clan:
@@ -170,7 +179,9 @@ def fetch_all(key):
                     profiles[tag] = p
     return {"clan": clan, "c_err": c_err, "war": war, "w_err": w_err,
             "cwl_round": cwl_round, "warlog": warlog, "wl_err": wl_err,
-            "raids": raids, "r_err": r_err, "profiles": profiles}
+            "raids": raids, "r_err": r_err, "profiles": profiles,
+            "opp_clan": opp_clan, "opp_warlog": opp_warlog,
+            "opp_wl_err": opp_wl_err}
 
 
 def enc(tag):
@@ -738,6 +749,23 @@ CSS = """
   .war-pending { margin-top:14px; font-size:13px; color:var(--ink-2);
                  background:var(--accent-dim); border:1px solid rgba(232,163,61,.3);
                  border-radius:10px; padding:11px 14px; }
+
+  /* ---------- scout report ---------- */
+  .scout-head { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+  .scout-badge { width:44px; height:44px; flex:none;
+                 filter:drop-shadow(0 3px 8px rgba(0,0,0,.5)); }
+  .scout-name { font-family:var(--display); font-weight:700; font-size:16px; }
+  .scout-table th { text-align:center; }
+  .scout-table th:first-child { text-align:left; }
+  .fdot { display:inline-grid; place-items:center; width:20px; height:20px;
+          border-radius:6px; font-size:10.5px; font-weight:700; margin:0 2px;
+          font-family:var(--display); }
+  .fdot.fw { background:rgba(72,184,101,.16); color:var(--green);
+             border:1px solid rgba(72,184,101,.4); }
+  .fdot.fl { background:rgba(224,96,96,.14); color:var(--red);
+             border:1px solid rgba(224,96,96,.4); }
+  .fdot.ft { background:var(--card-3); color:var(--muted);
+             border:1px solid var(--line-2); }
   .glance-top { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
                 margin-bottom:10px; }
   .glance-score { font-size:14.5px; line-height:1.55; }
@@ -1642,6 +1670,7 @@ def build_page(data, live_seconds=None):
 
     # ------------------------------ war panel -------------------------------
     roster_html = ""
+    scout_html = ""
     war_cls = ""          # tints the war cards green/red once the war ends
     war_tab_cls = ""      # tints the "War" nav button
     glance_cls = ""       # overview card: red in battle, green in prep,
@@ -1808,6 +1837,115 @@ def build_page(data, live_seconds=None):
         <div id="roster-us">{roster_block(team_rows, team_cards)}</div>
         <div id="roster-them" hidden>{roster_block(foe_rows, foe_cards)}</div>
         {legend}</div>"""
+
+        # ----------------------------- scout report --------------------------
+        def _war_stats(log):
+            """Aggregate a clan's public war log into scouting numbers."""
+            if not log:
+                return None
+            wars = [e for e in log.get("items", [])
+                    if (e.get("opponent") or {}).get("name") and e.get("result")]
+            if not wars:
+                return None
+            n = len(wars)
+            wins = sum(1 for e in wars if e["result"] == "win")
+            losses = sum(1 for e in wars if e["result"] == "lose")
+            used = avail = 0
+            for e in wars:
+                a = (e.get("clan") or {}).get("attacks")
+                ts = e.get("teamSize")
+                if a is not None and ts:
+                    used += a
+                    avail += ts * (e.get("attacksPerMember") or 2)
+            return {"n": n, "w": wins, "l": losses, "t": n - wins - losses,
+                    "winrate": wins / n * 100,
+                    "avg_d": sum(e["clan"]["destructionPercentage"]
+                                 for e in wars) / n,
+                    "disc": (used / avail * 100) if avail else None,
+                    "form": [e["result"] for e in wars[:5]]}
+
+        def _avg_th(side_clan):
+            ths = [mm.get("townhallLevel")
+                   for mm in side_clan.get("members", [])
+                   if isinstance(mm.get("townhallLevel"), int)]
+            return (sum(ths) / len(ths)) if ths else None
+
+        oc = data.get("opp_clan") or {}
+        ours_s = _war_stats(warlog)
+        theirs_s = _war_stats(data.get("opp_warlog"))
+
+        def srow(label, a, b, fmt, higher_better=True):
+            def cell(v, win):
+                cls = ' class="cv cmp-win"' if win else ' class="cv"'
+                return f'<td{cls}>{fmt(v) if v is not None else "&mdash;"}</td>'
+            aw = bw = False
+            if a is not None and b is not None and a != b:
+                aw = (a > b) if higher_better else (a < b)
+                bw = not aw
+            return f'<tr><td class="cl">{label}</td>{cell(a, aw)}{cell(b, bw)}</tr>'
+
+        def txt_row(label, a, b):
+            return (f'<tr><td class="cl">{label}</td><td class="cv">{a}</td>'
+                    f'<td class="cv">{b}</td></tr>')
+
+        def form_dots(st):
+            if not st:
+                return "&mdash;"
+            d = {"win": ("fw", "W"), "lose": ("fl", "L"), "tie": ("ft", "T")}
+            return "".join(f'<span class="fdot {d[r][0]}">{d[r][1]}</span>'
+                           for r in st["form"] if r in d)
+
+        def rec_str(st):
+            if not st:
+                return "&mdash;"
+            t = f'&ndash;{st["t"]}T' if st["t"] else ''
+            return f'{st["w"]}W&ndash;{st["l"]}L{t} <span class="quiet">of {st["n"]}</span>'
+
+        if oc or theirs_s:
+            pct = lambda v: f"{v:.0f}%"
+            pct1 = lambda v: f"{v:.1f}%"
+            num = lambda v: f"{v:,}"
+            g = lambda st, k: st[k] if st else None
+            rows = [
+                txt_row("Recent record", rec_str(ours_s), rec_str(theirs_s)),
+                srow("Win rate", g(ours_s, "winrate"), g(theirs_s, "winrate"), pct),
+                srow("Avg destruction", g(ours_s, "avg_d"), g(theirs_s, "avg_d"), pct1),
+                srow("Attacks used (discipline)", g(ours_s, "disc"),
+                     g(theirs_s, "disc"), pct),
+                srow("Avg Town Hall (this war)", _avg_th(us), _avg_th(them),
+                     lambda v: f"{v:.1f}"),
+                srow("War wins (all-time)", clan.get("warWins"),
+                     oc.get("warWins"), num),
+                srow("Win streak", clan.get("warWinStreak", 0),
+                     oc.get("warWinStreak"), num),
+                txt_row("Recent form", form_dots(ours_s), form_dots(theirs_s)),
+            ]
+            meta = []
+            if oc.get("clanLevel"):
+                meta.append(f'level {oc["clanLevel"]}')
+            owl = (oc.get("warLeague") or {}).get("name")
+            if owl:
+                meta.append(esc(owl))
+            if oc.get("members"):
+                meta.append(f'{oc["members"]} members')
+            ob = (oc.get("badgeUrls") or {}).get("small", "")
+            obadge = f'<img class="scout-badge" src="{esc(ob)}" alt="">' if ob else ''
+            note = ""
+            if theirs_s is None:
+                note = ('<p class="quiet" style="margin-top:10px">Their war log is '
+                        'set to private, so their past wars can\'t be scouted &mdash; '
+                        'profile stats only.</p>')
+            scout_html = f"""
+        <div class="card scout"><h2>Scout report</h2>
+        <div class="scout-head">{obadge}<div>
+          <div class="scout-name">{esc(them.get("name", "Enemy clan"))}</div>
+          <div class="quiet">{' &middot; '.join(meta) if meta else 'enemy clan'}</div>
+        </div></div>
+        <div class="table-scroll"><table class="cmp-table scout-table">
+          <thead><tr><th></th><th>{esc(us["name"])}</th><th>{esc(them["name"])}</th></tr></thead>
+          <tbody>{''.join(rows)}</tbody>
+        </table></div>
+        {note}</div>"""
 
         # who is ahead right now (stars, then destruction); 0 = tied / prep day
         if state == "preparation":
@@ -2210,6 +2348,7 @@ def build_page(data, live_seconds=None):
 
 <section class="panel" id="panel-war">
   <div class="card{war_cls}"><h2>Current war</h2>{war_html}</div>
+  {scout_html}
   {roster_html}
 </section>
 
