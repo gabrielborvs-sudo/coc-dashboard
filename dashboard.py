@@ -378,11 +378,35 @@ CSS = """
     background:linear-gradient(140deg, var(--card-2), var(--card) 60%);
     box-shadow:0 16px 44px rgba(0,0,0,.4);
   }
+  .banner { position:relative; overflow:hidden; }
+  .banner > * { position:relative; }
+  /* ambient aurora drifting behind the banner */
+  .banner::before { content:''; position:absolute; inset:0; pointer-events:none;
+    background:
+      radial-gradient(420px 200px at 86% -35%, rgba(232,163,61,.17), transparent 70%),
+      radial-gradient(380px 180px at 22% 135%, rgba(143,135,216,.11), transparent 70%);
+    animation:aurora 16s ease-in-out infinite alternate; }
+  @keyframes aurora {
+    to { background-position:-70px 16px, 70px -14px; } }
+  /* thin golden light travelling along the top edge */
+  .banner::after { content:''; position:absolute; top:0; left:0; right:0;
+    height:2px; opacity:.8; pointer-events:none;
+    background:linear-gradient(90deg, transparent 20%, rgba(232,163,61,.55) 45%,
+               rgba(242,212,145,.95) 50%, rgba(232,163,61,.55) 55%, transparent 80%);
+    background-size:250% 100%; animation:bannerline 8s linear infinite; }
+  @keyframes bannerline {
+    from { background-position:210% 0; } to { background-position:-110% 0; } }
   .banner .crest { width:64px; height:64px; flex:none;
-                   filter:drop-shadow(0 6px 14px rgba(0,0,0,.5)); }
+                   animation:crestglow 4.8s ease-in-out infinite; }
+  @keyframes crestglow {
+    0%, 100% { filter:drop-shadow(0 6px 14px rgba(0,0,0,.5)); }
+    50% { filter:drop-shadow(0 6px 14px rgba(0,0,0,.5))
+                 drop-shadow(0 0 16px rgba(232,163,61,.4)); }
+  }
   .who { min-width:0; }
   .kicker { font-size:10.5px; letter-spacing:2.4px; text-transform:uppercase;
             color:var(--accent); font-weight:600; margin-bottom:3px; }
+  .kicker::before { content:'\\2694'; margin-right:7px; font-size:11px; }
   .who h1 { font-family:var(--display); font-size:30px; font-weight:700;
             letter-spacing:-.4px; line-height:1.1; }
   /* slow golden shine sweeping the clan name every ~9s */
@@ -403,15 +427,35 @@ CSS = """
   .who .tag { color:var(--muted); font-size:12.5px; margin-top:3px;
               font-variant-numeric:tabular-nums; }
   .banner-right { margin-left:auto; text-align:right; flex:none; }
-  .lvl-chip { display:inline-block; font-family:var(--display); font-weight:700;
+  .lvl-chip { display:inline-block; position:relative; overflow:hidden;
+              font-family:var(--display); font-weight:700;
               font-size:13px; letter-spacing:.5px; color:var(--accent);
               border:1px solid rgba(232,163,61,.35); background:var(--accent-dim);
               border-radius:8px; padding:5px 12px; }
+  .lvl-chip::after { content:''; position:absolute; top:0; bottom:0; left:-70%;
+    width:45%; transform:skewX(-18deg); pointer-events:none;
+    background:linear-gradient(90deg, transparent, rgba(242,212,145,.28), transparent);
+    animation:sheen 8s ease-in-out infinite 2.5s; }
   .updated { color:var(--muted); font-size:11.5px; margin-top:8px; }
   .live-dot { display:inline-block; width:7px; height:7px; border-radius:50%;
               background:var(--green); margin-right:5px;
               animation:pulse 2.4s infinite; }
   @keyframes pulse { 50% { opacity:.3; } }
+
+  /* ---------- about card ---------- */
+  .abt { position:relative; overflow:hidden; }
+  .abt-desc { color:var(--ink-2); font-size:14.5px; line-height:1.7;
+              max-width:72ch; }
+  .abt-chips { display:flex; flex-wrap:wrap; gap:7px; margin-top:14px; }
+  .abt-chip { display:inline-flex; align-items:center; gap:7px;
+              border:1px solid var(--line-2); border-radius:8px;
+              padding:6px 12px; font-size:12px; color:var(--ink-2);
+              background:var(--card-2); }
+  .abt-chip .ai { font-size:12.5px; }
+  .abt-chip .al { width:16px; height:16px; }
+  .abt-quote { position:absolute; right:16px; top:-26px; font-size:120px;
+               font-family:var(--display); color:var(--ink); opacity:.05;
+               pointer-events:none; line-height:1; user-select:none; }
 
   /* ---------- tabs ---------- */
   nav {
@@ -2016,7 +2060,42 @@ def build_page(data, live_seconds=None):
     crest = clan.get("badgeUrls", {}).get("medium", "")
     crest_large = clan.get("badgeUrls", {}).get("large", crest)
     crest_html = f'<img class="crest" src="{esc(crest)}" alt="clan badge">' if crest else ''
-    desc = esc(clan.get("description", ""))
+    desc = esc(clan.get("description", "").strip())
+
+    # ------------------------------- about -----------------------------------
+    abt_chips = []
+
+    def abt_chip(ico, txt):
+        abt_chips.append(f'<span class="abt-chip"><span class="ai">{ico}</span>'
+                         f'{txt}</span>')
+
+    loc = (clan.get("location") or {}).get("name")
+    if loc:
+        abt_chip("&#128205;", esc(loc))
+    join_types = {"open": ("&#128275;", "Anyone can join"),
+                  "inviteOnly": ("&#9993;", "Invite only"),
+                  "closed": ("&#128274;", "Closed")}
+    if clan.get("type") in join_types:
+        abt_chip(*join_types[clan["type"]])
+    if clan.get("requiredTownhallLevel"):
+        abt_chip("&#127984;", f'TH{clan["requiredTownhallLevel"]}+ to join')
+    if clan.get("requiredTrophies"):
+        abt_chip("&#127942;", f'{clan["requiredTrophies"]:,}+ trophies')
+    lang = (clan.get("chatLanguage") or {}).get("name")
+    if lang:
+        abt_chip("&#128172;", esc(lang))
+    for lb in clan.get("labels", []):
+        ic = (lb.get("iconUrls") or {}).get("small", "")
+        img = f'<img class="al" src="{esc(ic)}" alt="" loading="lazy">' if ic else ''
+        abt_chips.append(f'<span class="abt-chip">{img}{esc(lb.get("name", ""))}</span>')
+
+    about_html = ""
+    if desc or abt_chips:
+        d_html = f'<p class="abt-desc">{desc}</p>' if desc else ''
+        chips_row = (f'<div class="abt-chips">{"".join(abt_chips)}</div>'
+                     if abt_chips else '')
+        about_html = (f'<div class="card abt"><h2>About</h2>{d_html}{chips_row}'
+                      f'<span class="abt-quote">&#8221;</span></div>')
 
     global LAST_MANIFEST
     LAST_MANIFEST = build_manifest(clan)
@@ -2082,7 +2161,7 @@ def build_page(data, live_seconds=None):
   <div class="card"><div class="tiles">{tiles_html}</div></div>
   <div class="card"><h2>Clan MVPs</h2>{mvp_html}</div>
   <div class="card{glance_cls}"><h2>{glance_title}</h2>{war_mini}</div>
-  {f'<div class="card"><h2>About</h2><p class="quiet">{desc}</p></div>' if desc else ''}
+  {about_html}
 </section>
 
 <section class="panel" id="panel-war">
