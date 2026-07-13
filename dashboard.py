@@ -18,6 +18,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
+from th_caps import UNIT_TH_CAPS, EQUIP_BS_CAPS, EQUIP_HERO, EQUIP_CURVE
+
 # ----------------------------- configuration -------------------------------
 KEY_FILE = Path(r"C:\Users\Borvs\Pictures\coc-key.txt")
 CLAN_TAG = "#2JYRQ0UPC"
@@ -221,14 +223,69 @@ TOP_TH = max(HERO_CAPS)
 # Super troops are temporary boosts, not lab progression - excluded from rush.
 SUPER_TROOPS = {"Sneaky Goblin", "Rocket Balloon", "Inferno Dragon", "Ice Hound"}
 
+# Blacksmith level available at each TH (equipment caps); TH16+ = 9.
+BS_AT_TH = {8: 1, 9: 2, 10: 3, 11: 4, 12: 5, 13: 6, 14: 7, 15: 8}
+
+# Equipment newer than the game-data files - hero attribution fallback.
+# (The live clan data refines this: anything a member has equipped maps
+# to that hero automatically in _equip_hero_map.)
+_EQUIP_HERO_EXTRA = {
+    "spikyball": "Barbarian King", "actionfigure": "Archer Queen",
+    "darkcrown": "Minion Prince", "metalpants": "Minion Prince",
+    "nobleiron": "Minion Prince", "heroictorch": "Grand Warden",
+    "fireheart": "Dragon Duke", "flameblower": "Dragon Duke",
+}
+
+
+def unit_cap(name, th, api_max):
+    """Exact max level for a troop/spell/pet/siege at this TH (th_caps.py).
+
+    TH18+ and unknown units fall back to the API's global max. 0 means the
+    table says 'locked here' - callers clamp with the member's real level.
+    """
+    if not isinstance(th, int) or th >= TOP_TH:
+        return api_max
+    caps = UNIT_TH_CAPS.get(_norm(name))
+    if not caps:
+        return api_max
+    return min(caps[min(th, len(caps)) - 1], api_max)
+
+
+def equip_cap(name, th, api_max):
+    """Max hero-equipment level at this TH via its Blacksmith level."""
+    if not isinstance(th, int) or th >= TOP_TH:
+        return api_max
+    bs = BS_AT_TH.get(th, 9 if th >= 16 else 0)
+    if not bs:
+        return 0
+    caps = EQUIP_BS_CAPS.get(_norm(name))
+    if caps is None:  # item newer than the data files: generic rarity curve
+        caps = EQUIP_CURVE["Epic" if api_max > 18 else "Common"]
+    return min(caps[bs - 1], api_max)
+
+
+def hero_cap(name, th, api_max):
+    """Max hero level at this TH (exact HERO_CAPS table)."""
+    cap = HERO_CAPS.get(th, {}).get(name, 0) if isinstance(th, int) else 0
+    return cap or api_max
+
+
+def _equip_hero_map(profiles):
+    """equipment name (normalized) -> owning hero. Game data + manual extras,
+    refined by whatever clan members actually have equipped right now."""
+    owner = dict(EQUIP_HERO)
+    owner.update(_EQUIP_HERO_EXTRA)
+    for p in (profiles or {}).values():
+        for h in p.get("heroes", []):
+            if h.get("village") != "home":
+                continue
+            for e in h.get("equipment", []):
+                owner[_norm(e["name"])] = h["name"]
+    return owner
+
 
 def _lab_completion(units, th):
-    """Approximate lab completion vs this TH's caps.
-
-    The API only exposes each unit's GLOBAL max level, so per-TH caps are
-    approximated as global_max - (TOP_TH - th), floored at 1 - Supercell's
-    lab progression adds roughly one level per TH. Only unlocked units count.
-    """
+    """Lab completion vs this TH's exact caps (th_caps.py, from game data)."""
     have = total = 0
     for u in units:
         if u.get("village") != "home":
@@ -236,7 +293,7 @@ def _lab_completion(units, th):
         name = u.get("name", "")
         if name in SUPER_TROOPS or name.startswith("Super "):
             continue
-        cap = max(1, u.get("maxLevel", 1) - (TOP_TH - th))
+        cap = max(1, unit_cap(name, th, u.get("maxLevel", 1)))
         have += min(u.get("level", 0), cap)
         total += cap
     return (have / total) if total else None
@@ -245,8 +302,8 @@ def _lab_completion(units, th):
 def rush_score(th, profile):
     """Composite rush index: 0% = maxed for this TH, 100% = untouched.
 
-    Weights: heroes 50% (exact per-TH caps), troops 35% + spells 15%
-    (approximated per-TH caps). Missing components redistribute their weight.
+    Weights: heroes 50%, troops 35%, spells 15% - all against exact per-TH
+    caps from the game's data files. Missing components redistribute weight.
     """
     if not isinstance(th, int) or not profile:
         return None
@@ -275,12 +332,13 @@ def parse_coc_time(s):
     return datetime.strptime(s, "%Y%m%dT%H%M%S.%fZ").replace(tzinfo=timezone.utc)
 
 
-def th_avatar(th, size=30):
+def th_avatar(th, size=30, cls=""):
     """Town-hall icon with a graceful fallback chip when the CDN is missing."""
     if not isinstance(th, int):
         return f'<span class="thchip" style="display:inline-grid">?</span>'
     src = TH_ICON.format(n=th)
-    return (f'<span class="th-av" style="--s:{size}px">'
+    cls = f" {cls}" if cls else ""
+    return (f'<span class="th-av{cls}" style="--s:{size}px">'
             f'<img src="{src}" alt="TH{th}" loading="lazy" '
             f'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'inline-grid\'">'
             f'<span class="thchip" style="display:none">{th}</span></span>')
@@ -424,14 +482,27 @@ CSS = """
             vertical-align:middle; margin-right:0; }
 
   /* ---------- heroes / meters ---------- */
-  .hero-row { display:grid; grid-template-columns:175px 1fr 84px;
+  .hero-row { display:grid; grid-template-columns:34px 175px 1fr 84px;
               align-items:center; gap:14px; padding:10px 0; }
   .hero-row + .hero-row { border-top:1px solid var(--line); }
   .hero-name { font-size:13.5px; font-weight:600; }
-  .hero-name::before {
-    content:''; display:inline-block; width:8px; height:8px; border-radius:2px;
-    background:var(--hue); margin-right:9px;
-  }
+  .hero-ico { width:34px; height:34px; object-fit:contain; justify-self:center;
+              filter:drop-shadow(0 2px 5px rgba(0,0,0,.45)); }
+  .hero-fb { display:inline-grid; place-items:center; width:34px; height:34px;
+             border-radius:50%; font:700 12px var(--display); color:var(--ink-2);
+             background:color-mix(in srgb, var(--hue) 22%, transparent);
+             border:1px solid color-mix(in srgb, var(--hue) 40%, transparent); }
+  .hero-eq { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:5px;
+             padding:1px 0 3px 48px; }
+  .eqchip { font-size:11px; padding:3px 9px; border-radius:6px; line-height:1.5;
+            border:1px solid var(--line-2); color:var(--ink-2); white-space:nowrap; }
+  .eqchip b { color:var(--ink); font-weight:600; }
+  .eqchip.eq-on { border-color:color-mix(in srgb, var(--hue) 55%, transparent);
+                  background:color-mix(in srgb, var(--hue) 10%, transparent);
+                  color:var(--ink); }
+  .eqchip.eq-on::before { content:'\\2605'; margin-right:5px; font-size:9.5px;
+                          color:var(--hue); }
+  .eqchip.eq-max b { color:var(--green); }
   .hero-lvl { font-size:12.5px; text-align:right; color:var(--ink-2);
               font-variant-numeric:tabular-nums; }
   .hero-lvl b { color:var(--ink); font-family:var(--display); font-size:15px; }
@@ -497,6 +568,12 @@ CSS = """
   .att-empty { color:var(--muted); }
   .att-pct { color:var(--ink-2); font-size:12px; margin-left:4px; }
   .att-target { color:var(--muted); font-size:10.5px; }
+  /* roster member cell: TH icon + name (works for both team and enemy) */
+  .rmem { display:flex; align-items:center; gap:8px; }
+  .rmem .th-av { margin-right:0; flex:none; }
+  .ritem > .th-av { margin-right:0; flex:none; margin-top:2px; }
+  .th-av.th-sm { --s:15px !important; margin-right:3px;
+                 vertical-align:-3px; }
   /* roster row highlight by completion */
   .roster tr.rst-full td { background:rgba(72,184,101,.07); }
   .roster tr.rst-full td:first-child { box-shadow:inset 3px 0 0 var(--green); }
@@ -752,9 +829,11 @@ CSS = """
     .war-grid { grid-template-columns:1fr; gap:10px; }
     .war-vs { justify-self:center; padding:5px 18px; }
     .war-stars { font-size:30px; }
-    .hero-row { grid-template-columns:104px 1fr 62px; gap:9px; padding:8px 0; }
+    .hero-row { grid-template-columns:26px 104px 1fr 62px; gap:9px; padding:8px 0; }
     .hero-name { font-size:12px; }
-    .hero-name::before { width:6px; height:6px; margin-right:6px; }
+    .hero-ico, .hero-fb { width:26px; height:26px; font-size:10px; }
+    .hero-eq { padding-left:35px; }
+    .eqchip { font-size:10px; padding:2px 7px; }
     .hero-lvl { font-size:11px; }
     .hero-lvl b { font-size:13px; }
     th, td { padding:8px 6px; }
@@ -843,9 +922,13 @@ INFO_MODAL = """
     <span class="rz-mid">16&ndash;40% somewhat rushed</span> &middot;
     <span class="rz-bad">41%+ rushed</span>.</p>
     <p>Note: someone who just upgraded their Town Hall will spike temporarily
-    &mdash; the score measures against their <i>new</i> TH's caps. Hero caps are
-    exact; troop/spell caps are close approximations (the API only publishes
-    global max levels).</p>
+    &mdash; the score measures against their <i>new</i> TH's caps. All caps
+    (heroes, troops, spells, equipment) are exact per-TH values taken from the
+    game's own data files.</p>
+    <p>In member profiles every level is shown against the max for that
+    member's <b>current Town Hall</b>, not the game-wide max &mdash; so a green
+    "maxed" mark means maxed <i>for their TH</i>. Equipment is listed under its
+    hero; <b>&#9733;</b> marks what they have equipped right now.</p>
 
     <h3>War roster colors</h3>
     <ul>
@@ -951,6 +1034,10 @@ PAGE_JS = """
   const HERO_HUES = { 'Barbarian King':'--orange', 'Archer Queen':'--magenta',
     'Grand Warden':'--gold', 'Royal Champion':'--blue',
     'Minion Prince':'--violet', 'Dragon Duke':'--red' };
+  const HERO_ICONS = { 'Barbarian King':'barbarian-king',
+    'Archer Queen':'archer-queen', 'Grand Warden':'grand-warden',
+    'Royal Champion':'royal-champion', 'Minion Prince':'minion-hero' };
+  const heroIconUrl = s => `https://coc.guide/static/imgs/hero/${s}.png`;
   const escj = s => String(s).replace(/[&<>"]/g,
     c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const fmt = n => Number(n).toLocaleString('en-US');
@@ -974,13 +1061,33 @@ PAGE_JS = """
     const ratio = m.received ? (m.donations / m.received).toFixed(1) + '&times;' : '&mdash;';
     let heroesHtml = '';
     (m.heroes || []).forEach(h => {
+      const hue = h.level == null ? '--muted' : (HERO_HUES[h.name] || '--blue');
+      const slug = HERO_ICONS[h.name];
+      const initials = h.name.split(' ').map(w => w[0]).join('').slice(0, 2);
+      const icon = slug
+        ? `<img class="hero-ico" src="${heroIconUrl(slug)}" alt="" loading="lazy"` +
+          ` onerror="this.style.visibility='hidden'">`
+        : `<span class="hero-fb">${escj(initials)}</span>`;
+      let eq = '';
+      (h.eq || []).forEach(e => {
+        eq += `<span class="eqchip${e.on ? ' eq-on' : ''}${e.l >= e.m ? ' eq-max' : ''}"` +
+              ` title="${e.on ? 'currently equipped' : 'owned'}">` +
+              `${escj(e.n)} <b>${e.l}</b>/${e.m}</span>`;
+      });
+      const eqRow = eq ? `<div class="hero-eq">${eq}</div>` : '';
+      if (h.level == null) {   // leftover equipment with no known hero
+        heroesHtml += `<div class="hero-row" style="--hue:var(${hue})">${icon}` +
+          `<span class="hero-name">${escj(h.name)}</span>` +
+          `<div></div><div></div>${eqRow}</div>`;
+        return;
+      }
       const pct = h.max ? Math.round(h.level / h.max * 100) : 0;
-      const hue = HERO_HUES[h.name] || '--blue';
-      const maxed = h.level === h.max ? ' meter-max' : '';
-      heroesHtml += `<div class="hero-row" style="--hue:var(${hue})">` +
+      const maxed = h.level >= h.max ? ' meter-max' : '';
+      heroesHtml += `<div class="hero-row" style="--hue:var(${hue})">${icon}` +
         `<span class="hero-name">${escj(h.name)}</span>` +
         `<div class="meter"><div class="meter-fill${maxed}" style="width:${pct}%"></div></div>` +
-        `<span class="hero-lvl"><b>${h.level}</b> / ${h.max}</span></div>`;
+        `<span class="hero-lvl"><b>${h.level}</b> / ${h.max}</span>` +
+        eqRow + `</div>`;
     });
     if (!heroesHtml) heroesHtml = '<p class="quiet">No hero data available.</p>';
     function unitGrid(units) {
@@ -1125,6 +1232,7 @@ PAGE_JS = """
   // each icon is downloaded exactly once per device, ever.
   setTimeout(() => {
     const urls = new Set(Object.values(UICONS));
+    Object.values(HERO_ICONS).forEach(s => urls.add(heroIconUrl(s)));
     Object.values(MEMBERS).forEach(m => {
       if (typeof m.th === 'number')
         urls.add(`https://www.clash.ninja/images/entities/1_${m.th}.png`);
@@ -1191,8 +1299,9 @@ def build_error_page(msg):
             f'</div></body></html>')
 
 
-def _member_payload(m, profiles):
-    """Compact per-member data embedded in the page for the detail view."""
+def _member_payload(m, profiles, eqmap=None):
+    """Compact per-member data embedded in the page for the detail view.
+    All 'm'/'max' values are the cap at the member's CURRENT Town Hall."""
     p = profiles.get(m["tag"])
     base = {
         "tag": m["tag"], "name": m["name"],
@@ -1205,20 +1314,59 @@ def _member_payload(m, profiles):
         "troops": [], "spells": [],
     }
     if p:
+        th = p.get("townHallLevel", base["th"])
+        eqmap = eqmap or {}
+
         def unit_list(key):
-            return [{"n": u["name"], "l": u["level"], "m": u["maxLevel"]}
-                    for u in p.get(key, [])
-                    if u.get("village") == "home"
-                    and u["name"] not in SUPER_TROOPS
-                    and not u["name"].startswith("Super ")]
+            out = []
+            for u in p.get(key, []):
+                if (u.get("village") != "home"
+                        or u["name"] in SUPER_TROOPS
+                        or u["name"].startswith("Super ")):
+                    continue
+                cap = unit_cap(u["name"], th, u["maxLevel"])
+                out.append({"n": u["name"], "l": u["level"],
+                            "m": max(cap, u["level"])})
+            return out
+
+        owned_eq = [e for e in p.get("heroEquipment", [])
+                    if e.get("village") == "home"]
+        heroes, attached = [], set()
+        for h in p.get("heroes", []):
+            if h.get("village") != "home":
+                continue
+            equipped = {e["name"] for e in h.get("equipment", [])}
+            eq = []
+            for e in owned_eq:
+                if (e["name"] not in equipped
+                        and eqmap.get(_norm(e["name"])) != h["name"]):
+                    continue
+                cap = equip_cap(e["name"], th, e.get("maxLevel", 1))
+                eq.append({"n": e["name"], "l": e["level"],
+                           "m": max(cap, e["level"]),
+                           "on": e["name"] in equipped})
+                attached.add(e["name"])
+            eq.sort(key=lambda x: (not x["on"], -x["l"]))
+            cap = hero_cap(h["name"], th, h["maxLevel"])
+            heroes.append({"name": h["name"], "level": h["level"],
+                           "max": max(cap, h["level"]), "eq": eq})
+        rest = [e for e in owned_eq if e["name"] not in attached]
+        if rest:
+            heroes.append({"name": "Other equipment", "level": None,
+                           "max": None, "eq": [
+                               {"n": e["name"], "l": e["level"],
+                                "m": max(equip_cap(e["name"], th,
+                                                   e.get("maxLevel", 1)),
+                                         e["level"]),
+                                "on": False} for e in rest]})
+
         base.update({
-            "th": p.get("townHallLevel", base["th"]),
+            "th": th,
             "xp": p.get("expLevel", base["xp"]),
             "best": p.get("bestTrophies", base["best"]),
             "warStars": p.get("warStars", 0),
             "capital": p.get("clanCapitalContributions", 0),
-            "heroes": [{"name": h["name"], "level": h["level"], "max": h["maxLevel"]}
-                       for h in p.get("heroes", []) if h.get("village") == "home"],
+            "heroes": heroes,
             "troops": unit_list("troops"),
             "spells": unit_list("spells"),
         })
@@ -1341,11 +1489,16 @@ def build_page(data, live_seconds=None):
             return ('<span class="st">' + "&#9733;" * n + "</span>"
                     + '<span class="st-off">' + "&#9734;" * (3 - n) + "</span>")
 
+        def _target(d):
+            return (f'#{d.get("mapPosition", "?")} '
+                    f'{th_avatar(d.get("townhallLevel"), 15, "th-sm")}'
+                    f'TH{d.get("townhallLevel", "?")}')
+
         def attack_cell(a, dmap):
             if a is None:
                 return '<td class="att att-empty">&mdash;</td>'
             d = dmap.get(a["defenderTag"], {})
-            target = f'#{d.get("mapPosition", "?")} TH{d.get("townhallLevel", "?")}'
+            target = _target(d)
             return (f'<td class="att st{a["stars"]}">{stars_str(a["stars"])} '
                     f'<span class="att-pct">{a["destructionPercentage"]}%</span>'
                     f'<div class="att-target">vs {target}</div></td>')
@@ -1354,7 +1507,7 @@ def build_page(data, live_seconds=None):
             if a is None:
                 return f'<span class="ratt att-empty">A{idx}: &mdash;</span>'
             d = dmap.get(a["defenderTag"], {})
-            target = f'#{d.get("mapPosition", "?")} TH{d.get("townhallLevel", "?")}'
+            target = _target(d)
             return (f'<span class="ratt att st{a["stars"]}">{stars_str(a["stars"])} '
                     f'<span class="att-pct">{a["destructionPercentage"]}%</span> '
                     f'<span class="att-target">vs {target}</span></span>')
@@ -1383,7 +1536,9 @@ def build_page(data, live_seconds=None):
                 row_cls = f' class="{row_name}"' if row_name else ''
                 rows.append(
                     f'<tr{row_cls}><td class="num">{m["mapPosition"]}</td>'
-                    f'<td>{esc(m["name"])}<div class="att-target">TH{m.get("townhallLevel", "?")}</div></td>'
+                    f'<td><div class="rmem">{th_avatar(m.get("townhallLevel"), 26)}'
+                    f'<div>{esc(m["name"])}<div class="att-target">TH{m.get("townhallLevel", "?")}</div></div>'
+                    f'</div></td>'
                     f'{cells}<td class="num">{status}</td></tr>')
 
                 if state == "preparation":
@@ -1396,6 +1551,7 @@ def build_page(data, live_seconds=None):
                 cards.append(
                     f'<div class="ritem{card_cls}">'
                     f'<span class="rk">{m["mapPosition"]}</span>'
+                    f'{th_avatar(m.get("townhallLevel"), 24)}'
                     f'<div class="ri-main"><div class="mi-name">{esc(m["name"])} '
                     f'<span class="att-target">TH{m.get("townhallLevel", "?")}</span></div>'
                     f'{atk_line}</div>'
@@ -1458,7 +1614,8 @@ def build_page(data, live_seconds=None):
             f'<span class="g-name">{esc(them["name"])}</span></div>')
 
     # --------------------------- members tab ---------------------------------
-    member_data = {m["tag"]: _member_payload(m, profiles) for m in members}
+    eqmap = _equip_hero_map(profiles)
+    member_data = {m["tag"]: _member_payload(m, profiles, eqmap) for m in members}
     members_json = json.dumps(member_data).replace("</", "<\\/")
 
     top_don = max((m["donations"] for m in members), default=0) or 1
