@@ -463,12 +463,42 @@ CSS = """
   .tiles > .tile:nth-child(5) { animation-delay:.24s; }
   .tiles > .tile:nth-child(6) { animation-delay:.30s; }
   .tile {
+    position:relative; overflow:hidden;
     background:var(--card-2); border:1px solid var(--line);
     border-radius:12px; padding:14px 16px;
     transition:border-color .15s, transform .15s;
   }
   .tile:hover { border-color:color-mix(in srgb, var(--tint) 45%, transparent);
                 transform:translateY(-2px); }
+
+  /* ---------- themed overview tiles ---------- */
+  .tile-gold { border-color:rgba(232,194,90,.28); }
+  .tile-gold::before { content:''; position:absolute; top:0; bottom:0; left:-70%;
+    width:45%; transform:skewX(-18deg); pointer-events:none;
+    background:linear-gradient(90deg, transparent, rgba(232,194,90,.10), transparent);
+    animation:sheen 7.5s ease-in-out infinite .8s; }
+  .tile-gold .tile-value { color:#e8c25a;
+    text-shadow:0 0 16px rgba(232,194,90,.25); }
+  .tile-war { border-color:rgba(224,96,96,.26); }
+  .tile-war .tile-value { color:#e57272;
+    text-shadow:0 0 14px rgba(224,96,96,.25); }
+  .tile-mark { position:absolute; right:6px; bottom:-4px; font-size:46px;
+    opacity:.08; pointer-events:none; transform:rotate(-14deg);
+    filter:grayscale(1) brightness(1.6); }
+  .tile-streak { border-color:rgba(255,100,70,.32); }
+  .tile-streak::before { content:''; position:absolute; right:-30px; bottom:-46px;
+    width:140px; height:100px; border-radius:50%; pointer-events:none;
+    background:radial-gradient(closest-side, rgba(255,90,50,.24), transparent 72%);
+    animation:smolder 3.2s ease-in-out infinite; }
+  .tile-streak .tile-value { color:#ff6b57;
+    text-shadow:0 0 16px rgba(255,90,50,.35); }
+  .tile-streak .tile-value::before { content:'\\01F525'; display:inline-block;
+    font-size:.68em; margin-right:7px; vertical-align:3px;
+    transform-origin:50% 90%; animation:flick 1.4s infinite ease-in-out;
+    filter:drop-shadow(0 0 5px rgba(255,140,0,.65)); }
+  .tile-league .tile-value.txt { color:var(--tint);
+    text-shadow:0 0 14px color-mix(in srgb, var(--tint) 35%, transparent); }
+  .tile-league { border-color:color-mix(in srgb, var(--tint) 30%, transparent); }
   .tile-label { font-size:10.5px; color:var(--ink-2); letter-spacing:1.4px;
                 text-transform:uppercase; font-weight:600;
                 display:flex; align-items:center; gap:7px; }
@@ -580,6 +610,15 @@ CSS = """
   @keyframes grow { from { width:0; } }
 
   /* ---------- war ---------- */
+  /* overview war-at-a-glance card, tinted by state */
+  .card.glance-live { border-color:rgba(224,96,96,.5);
+    background:linear-gradient(165deg, rgba(224,96,96,.15), var(--card) 62%); }
+  .card.glance-prep { border-color:rgba(72,184,101,.5);
+    background:linear-gradient(165deg, rgba(72,184,101,.14), var(--card) 62%); }
+  .card.glance-won { border-color:rgba(232,194,90,.55);
+    background:linear-gradient(165deg, rgba(232,194,90,.14), var(--card) 62%); }
+  .card.glance-lost { border-color:rgba(148,158,172,.45);
+    background:linear-gradient(165deg, rgba(148,158,172,.10), var(--card) 62%); }
   /* war result tint - whole card goes green on victory, red on defeat */
   .card.war-won { border-color:rgba(72,184,101,.45);
     background:linear-gradient(165deg, rgba(72,184,101,.13), var(--card) 60%); }
@@ -1468,25 +1507,45 @@ def build_page(data, live_seconds=None):
     capital_league = (clan.get("capitalLeague") or {}).get("name", "")
     tiles_parts = []
 
-    def tile(val, lbl, sub, tint, countable=True, txt=False):
+    def tile(val, lbl, sub, tint, countable=True, txt=False, fx="", deco=""):
         cls = "tile-value txt" if txt else "tile-value"
         if countable and isinstance(val, int):
             v = f'<div class="{cls}" data-count="{val}">{val:,}</div>'
         else:
             v = f'<div class="{cls}">{val}</div>'
+        tint_css = f"var({tint})" if tint.startswith("--") else tint
+        fx_cls = f" {fx}" if fx else ""
         tiles_parts.append(
-            f'<div class="tile" style="--tint:var({tint})">'
+            f'<div class="tile{fx_cls}" style="--tint:{tint_css}">{deco}'
             f'<div class="tile-label">{lbl}</div>'
             f'{v}<div class="tile-sub">{sub}</div></div>')
 
-    tile(clan["clanPoints"], "Clan points", "home village", "--gold")
-    tile(clan.get("warWins", 0), "War wins", "all-time", "--red")
+    def league_color(name):
+        """Tint the war-league tile by the league it is actually in."""
+        n = (name or "").lower()
+        for key, color in (("bronze", "#c98d5f"), ("silver", "#c9d2dd"),
+                           ("gold", "#e8c25a"), ("crystal", "#8fd3f0"),
+                           ("master", "#8f87d8"), ("champion", "#e06060"),
+                           ("titan", "#e8a33d"), ("legend", "#f0c14b")):
+            if key in n:
+                return color
+        return None
+
+    embers = ('<span class="ember e1"></span><span class="ember e2"></span>'
+              '<span class="ember e3"></span>')
+    tile(clan["clanPoints"], "Clan points", "home village", "--gold",
+         fx="tile-gold")
+    tile(clan.get("warWins", 0), "War wins", "all-time", "--red",
+         fx="tile-war", deco='<span class="tile-mark">&#9876;</span>')
     if clan.get("warWinStreak"):
-        tile(clan["warWinStreak"], "Win streak", "current", "--orange")
+        tile(clan["warWinStreak"], "Win streak", "current", "--red",
+             fx="tile-streak", deco=embers)
     tile(clan["members"], "Members", "of 50", "--blue")
     tile(clan.get("clanCapitalPoints", 0), "Capital points",
          capital_league or "clan capital", "--violet")
-    tile(war_league, "War league", "CWL", "--aqua", countable=False, txt=True)
+    lg_color = league_color(war_league if isinstance(war_league, str) else "")
+    tile(war_league, "War league", "CWL", lg_color or "--aqua",
+         countable=False, txt=True, fx="tile-league" if lg_color else "")
     tiles_html = "\n".join(tiles_parts)
 
     # ------------------------------ MVP cards --------------------------------
@@ -1514,6 +1573,8 @@ def build_page(data, live_seconds=None):
     roster_html = ""
     war_cls = ""          # tints the war cards green/red once the war ends
     war_tab_cls = ""      # tints the "War" nav button
+    glance_cls = ""       # overview card: red in battle, green in prep,
+                          # gold on victory, slate on defeat
     glance_title = "War"
     if w_err:
         war_html = (f'<div class="empty"><div class="big">&#9876;</div>'
@@ -1533,9 +1594,11 @@ def build_page(data, live_seconds=None):
         if state == "preparation":
             when = parse_coc_time(war["startTime"])
             label, badge = "Preparation day", "prep"
+            glance_cls = " glance-prep"
         elif state == "inWar":
             when = parse_coc_time(war["endTime"])
             label, badge = "Battle day", "live"
+            glance_cls = " glance-live"
         else:
             when = None
             if us["stars"] != them["stars"]:
@@ -1546,6 +1609,7 @@ def build_page(data, live_seconds=None):
             badge = "won" if won else "lost"
             war_cls = " war-won" if won else " war-lost"
             war_tab_cls = " tab-won" if won else " tab-lost"
+            glance_cls = " glance-won" if won else " glance-lost"
         if cwl_round:
             label = f"CWL Round {cwl_round} &middot; {label}"
 
@@ -2017,7 +2081,7 @@ def build_page(data, live_seconds=None):
 <section class="panel" id="panel-overview">
   <div class="card"><div class="tiles">{tiles_html}</div></div>
   <div class="card"><h2>Clan MVPs</h2>{mvp_html}</div>
-  <div class="card{war_cls}"><h2>{glance_title}</h2>{war_mini}</div>
+  <div class="card{glance_cls}"><h2>{glance_title}</h2>{war_mini}</div>
   {f'<div class="card"><h2>About</h2><p class="quiet">{desc}</p></div>' if desc else ''}
 </section>
 
