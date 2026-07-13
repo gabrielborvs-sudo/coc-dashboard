@@ -1233,18 +1233,18 @@ PAGE_JS = """
       const arrow = b.querySelector('.dir');
       if (arrow) arrow.textContent = active ? (dir === 'desc' ? ' ↓' : ' ↑') : '';
     });
-    try { localStorage.setItem('coc-sort', key + ':' + dir); } catch (e) {}
+    try { localStorage.setItem('coc-sort2', key + ':' + dir); } catch (e) {}
   }
-  document.querySelectorAll('.sortbtn').forEach(b =>
+  document.querySelectorAll('.sortbtn[data-sort]').forEach(b =>
     b.addEventListener('click', () => {
       const k = b.dataset.sort;
       applySort(k, k === sortKey ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc');
     }));
   let savedSort = null;
-  try { savedSort = localStorage.getItem('coc-sort'); } catch (e) {}
+  try { savedSort = localStorage.getItem('coc-sort2'); } catch (e) {}
   if (sortContainers.length) {
-    const [sk, sd] = (savedSort || 'don:desc').split(':');
-    applySort(sk || 'don', sd === 'asc' ? 'asc' : 'desc');
+    const [sk, sd] = (savedSort || 'th:desc').split(':');   // default: Town Hall
+    applySort(sk || 'th', sd === 'asc' ? 'asc' : 'desc');
   }
 
   // ---------------- member detail ----------------
