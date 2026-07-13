@@ -708,6 +708,33 @@ CSS = """
   .destr div { height:100%; border-radius:3px; background:var(--blue);
                animation:grow .8s cubic-bezier(.2,.7,.3,1); }
   .war-side.them .destr div { background:var(--red); }
+
+  /* live winner / loser treatment while the war runs */
+  .war-side { position:relative; }
+  .war-side.side-lead { border-color:rgba(232,194,90,.45); border-top-color:#e8c25a;
+    background:linear-gradient(180deg, rgba(232,194,90,.09), var(--card-2) 65%);
+    animation:leadglow 2.8s ease-in-out infinite; }
+  @keyframes leadglow {
+    50% { box-shadow:0 0 24px rgba(232,194,90,.15); } }
+  .war-side.side-lead .war-stars { text-shadow:0 0 18px rgba(232,194,90,.35); }
+  .war-side.side-lead .st-ico { display:inline-block;
+    animation:starpulse 2.8s ease-in-out infinite; }
+  @keyframes starpulse {
+    50% { filter:drop-shadow(0 0 8px rgba(232,194,90,.85)); transform:scale(1.08); } }
+  .lead-tag { position:absolute; top:10px; right:12px;
+    font-family:var(--display); font-size:9.5px; font-weight:700;
+    letter-spacing:1.6px; text-transform:uppercase; color:#e8c25a;
+    animation:pulse 2.8s ease-in-out infinite; }
+  .war-side.side-trail { opacity:.72; filter:saturate(.78); }
+  .war-side.side-lead .destr div {
+    background:linear-gradient(90deg, var(--blue) 25%, #a6cdf7 50%, var(--blue) 75%);
+    background-size:200% 100%;
+    animation:grow .8s cubic-bezier(.2,.7,.3,1), destrflow 2.4s linear infinite; }
+  .war-side.them.side-lead .destr div {
+    background:linear-gradient(90deg, var(--red) 25%, #f2a6a6 50%, var(--red) 75%);
+    background-size:200% 100%; }
+  @keyframes destrflow {
+    from { background-position:200% 0; } to { background-position:0% 0; } }
   .war-pending { margin-top:14px; font-size:13px; color:var(--ink-2);
                  background:var(--accent-dim); border:1px solid rgba(232,163,61,.3);
                  border-radius:10px; padding:11px 14px; }
@@ -1782,10 +1809,27 @@ def build_page(data, live_seconds=None):
         <div id="roster-them" hidden>{roster_block(foe_rows, foe_cards)}</div>
         {legend}</div>"""
 
-        def side(c, cls):
+        # who is ahead right now (stars, then destruction); 0 = tied / prep day
+        if state == "preparation":
+            lead = 0
+        elif us["stars"] != them["stars"]:
+            lead = 1 if us["stars"] > them["stars"] else -1
+        elif us["destructionPercentage"] != them["destructionPercentage"]:
+            lead = 1 if us["destructionPercentage"] > them["destructionPercentage"] else -1
+        else:
+            lead = 0
+        lead_word = "Winner" if state == "warEnded" else "Leading"
+
+        def side(c, cls, delta=0):
             badge_img = c.get("badgeUrls", {}).get("small", "")
             img = f'<img src="{esc(badge_img)}" alt="">' if badge_img else ''
-            return (f'<div class="war-side {cls}">{img}'
+            extra, tag = "", ""
+            if delta > 0:
+                extra = " side-lead"
+                tag = f'<span class="lead-tag">&#9650; {lead_word}</span>'
+            elif delta < 0:
+                extra = " side-trail"
+            return (f'<div class="war-side {cls}{extra}">{tag}{img}'
                     f'<div class="war-clan">{esc(c["name"])}</div>'
                     f'<div class="war-stars"><span class="st-ico">&#9733;</span> '
                     f'<span data-count="{c["stars"]}">{c["stars"]}</span></div>'
@@ -1796,7 +1840,7 @@ def build_page(data, live_seconds=None):
         war_html = f"""
         <div class="war-head"><span class="war-badge war-badge-{badge}">{label}</span>
         <span class="quiet">{war["teamSize"]}v{war["teamSize"]} &middot; {esc(time_txt)}</span></div>
-        <div class="war-grid">{side(us, "us")}<div class="war-vs">VS</div>{side(them, "them")}</div>
+        <div class="war-grid">{side(us, "us", lead)}<div class="war-vs">VS</div>{side(them, "them", -lead)}</div>
         {slackers_html}"""
         glance_title = "Ongoing War" if state in ("preparation", "inWar") else "War Result"
         war_mini = (
