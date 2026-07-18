@@ -52,6 +52,7 @@ OWNERS = {
              "#9RP8JUQ2",    # Lou Lou
              "#LJLPLCCP",    # Cole
              "#G2PLCLJCR",   # Snakey
+             "#G8CLJ2UGJ",   # Wingull
              "#GJ922UCGL",   # Wingull2.0
              "#GRPLVU299",   # Wingull3.0
              "#G9UL02PUV"],  # Sylvie
@@ -68,21 +69,52 @@ OWNERS = {
              "#QPVVPGL80"],  # FreakyNikki
     "Nabi": ["#QUU9L0CCC",   # Nabi
              "#GUCPCY0CC"],  # Laney'sDog
+    "Josh": ["#L9R98R0J"],   # JAEYEON
+    "Miks": ["#8RQJQLGQY",   # Aezakmi
+             "#YCCG9GQR0"],  # Bomba
+    "Daren": ["#P8Q02990L"], # QT Prime
+    "Suwa": ["#GUUJLYYVC"],  # GXN
+    "Otep": ["#J2YPPQ22",    # rey pinyoko
+             "#R2QG8QL8J"],  # Gabby
+    "Drey": ["#CPGPR9C0"],   # JOHNANDREYDR
+    "Coach": ["#2LP0Y892J"], # BEST CoC GaMeR
+    "zql":  ["#L9GVQR0GV",   # PewPew
+             "#GJGL89QYG"],  # zql
+    "Ian":  ["#QCYLYGQJV",   # ian
+             "#QUJ0LJCUU"],  # khaleesi
 }
-_OWNER_HUES = ["--gold", "--aqua", "--violet", "--magenta", "--blue",
-               "--orange", "--green", "--red"]
+
+# Accounts brought in by a member's friend: same pentagon tag but FILLED
+# with that member's color and carrying no name.
+FRIENDS = {
+    "Josh":  ["#YGJR9P82"],   # Ace
+    "Nabi":  ["#CURCPR9V",    # BIRDMAN
+              "#GJJ0880Y8"],  # Smile'N
+    "Daren": ["#GVGGV0PUR"],  # Kamekaze
+}
+
+_OWNER_HUES = ["#e8a33d", "#2ea583", "#8f87d8", "#c76490", "#4d8fe0",
+               "#dd7b45", "#48b865", "#e06060", "#4ec9b0", "#a3c95a",
+               "#6fc3e8", "#eda17a", "#b39ddb", "#e88aa4", "#cbb27a",
+               "#7fd8a5", "#d8b4e2", "#9ab8d8"]
 OWNER_OF = {t: n for n, tags in OWNERS.items() for t in tags}
+FRIEND_OF = {t: n for n, tags in FRIENDS.items() for t in tags}
 OWNER_HUE = {n: _OWNER_HUES[i % len(_OWNER_HUES)] for i, n in enumerate(OWNERS)}
 
 
 def owner_tag(tag, small=False):
-    """Small colored badge naming the human behind an account."""
-    o = OWNER_OF.get(tag)
-    if not o:
-        return ""
+    """Colored pentagon badge: named outline for the owner's own accounts,
+    nameless filled plate for accounts invited by that person's friend."""
     sm = " otag-sm" if small else ""
-    return (f'<span class="otag{sm}" style="--ot:var({OWNER_HUE[o]})">'
-            f'<span class="ot">{esc(o)}</span></span>')
+    o = OWNER_OF.get(tag)
+    if o:
+        return (f'<span class="otag{sm}" style="--ot:{OWNER_HUE[o]}">'
+                f'<span class="ot">{esc(o)}</span></span>')
+    f = FRIEND_OF.get(tag)
+    if f and f in OWNER_HUE:
+        return (f'<span class="otag otag-fill{sm}" style="--ot:{OWNER_HUE[f]}"'
+                f' title="friend of {esc(f)}"><span class="ot">&nbsp;</span></span>')
+    return ""
 
 
 def _norm(name):
@@ -937,6 +969,9 @@ CSS = """
   .otag-sm { font-size:7.5px; letter-spacing:.9px;
              padding:2.5px 6px 2.5px 3px; margin-left:11px; }
   .otag-sm::before { width:10px; height:10px; }
+  /* friend variant: same pentagon, no name, solid fill in the inviter's color */
+  .otag-fill { background:var(--ot); border-color:var(--ot); min-width:10px; }
+  .otag-fill::before { background:var(--ot); border:none; }
   .role-leader   { color:#e8c25a; border-color:rgba(232,194,90,.45); }
   .role-coLeader { color:var(--violet); border-color:rgba(143,135,216,.45); }
   .role-admin    { color:var(--aqua); border-color:rgba(46,165,131,.45); }
@@ -1406,7 +1441,8 @@ PAGE_JS = """
     box.innerHTML =
       `<div class="detail-head">` + thImg(m.th, 46) +
       `<div><div class="n">${escj(m.name)}` +
-      (m.owner ? `<span class="otag" style="--ot:var(${m.ohue})"><span class="ot">${escj(m.owner)}</span></span>` : '') +
+      (m.owner ? `<span class="otag" style="--ot:${m.ohue}"><span class="ot">${escj(m.owner)}</span></span>`
+       : m.fr ? `<span class="otag otag-fill" style="--ot:${m.ohue}"><span class="ot">&nbsp;</span></span>` : '') +
       `</div>` +
       `<div class="quiet">${escj(m.tag)} &middot; ${escj(m.roleName)} &middot; TH${m.th} &middot; XP ${m.xp}` +
       (m.league ? ` &middot; ${escj(m.league)}` : '') +
@@ -1616,7 +1652,10 @@ def _member_payload(m, profiles, eqmap=None):
         "league": (m.get("league") or {}).get("name", ""), "heroes": [],
         "troops": [], "spells": [],
         "owner": OWNER_OF.get(m["tag"], ""),
-        "ohue": OWNER_HUE.get(OWNER_OF.get(m["tag"], ""), "--gold"),
+        "fr": (not OWNER_OF.get(m["tag"])
+               and FRIEND_OF.get(m["tag"]) in OWNER_HUE),
+        "ohue": OWNER_HUE.get(OWNER_OF.get(m["tag"])
+                              or FRIEND_OF.get(m["tag"], ""), "#e8a33d"),
     }
     if p:
         th = p.get("townHallLevel", base["th"])
