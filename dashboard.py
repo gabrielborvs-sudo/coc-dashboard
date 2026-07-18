@@ -91,6 +91,7 @@ FRIENDS = {
     "Nabi":  ["#CURCPR9V",    # BIRDMAN
               "#GJJ0880Y8"],  # Smile'N
     "Daren": ["#GVGGV0PUR"],  # Kamekaze
+    "Jolo":  ["#L9GVQ9L8"],   # Yolol
 }
 
 _OWNER_HUES = ["#e8a33d", "#2ea583", "#8f87d8", "#c76490", "#4d8fe0",
