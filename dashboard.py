@@ -1014,9 +1014,11 @@ CSS = """
   .mi-don { font-size:13.5px; font-variant-numeric:tabular-nums; font-weight:600; }
   .mi-right .mi-sub { text-align:right; }
 
-  /* ---------- member detail ---------- */
-  #member-detail { display:none; }
-  .detail-head { display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+  /* ---------- member detail (modal window) ---------- */
+  .modal-wide { max-width:780px; }
+  .detail-head { display:flex; align-items:center; gap:14px; margin-bottom:16px;
+                 position:sticky; top:-22px; z-index:2; background:var(--card);
+                 padding:10px 0; margin-top:-10px; }
   .detail-head .n { font-family:var(--display); font-weight:700; font-size:21px;
                     letter-spacing:-.3px; }
   .detail-head .quiet { font-size:12px; }
@@ -1458,15 +1460,21 @@ PAGE_JS = """
       `</div><h2>Heroes</h2>` + heroesHtml +
       `<h2 style="margin-top:20px">Troops</h2>` + unitGrid(m.troops) +
       `<h2 style="margin-top:20px">Spells</h2>` + unitGrid(m.spells);
-    box.style.display = 'block';
-    box.scrollIntoView({ behavior:'smooth', block:'start' });
+    const back = document.getElementById('member-back');
+    if (back) back.hidden = false;
+    box.scrollTop = 0;
   }
   function hideMember() {
-    const box = document.getElementById('member-detail');
-    if (box) box.style.display = 'none';
+    const back = document.getElementById('member-back');
+    if (back) back.hidden = true;
   }
   document.querySelectorAll('tr[data-tag], .mitem[data-tag]').forEach(row =>
     row.addEventListener('click', () => showMember(row.dataset.tag)));
+  const memberBack = document.getElementById('member-back');
+  if (memberBack) memberBack.addEventListener('click', e => {
+    if (e.target === memberBack) hideMember();   // tap outside closes
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hideMember(); });
 
   // ---------------- member comparison ----------------
   const selA = document.getElementById('cmpA');
@@ -2484,8 +2492,11 @@ def build_page(data, live_seconds=None):
   {roster_html}
 </section>
 
+<div class="modal-back" id="member-back" hidden>
+  <div class="modal modal-wide" id="member-detail"></div>
+</div>
+
 <section class="panel" id="panel-members">
-  <div class="card" id="member-detail"></div>
   <div class="card"><h2>Members
   <span class="im h2-info" data-info title="How this works">&#9432;</span></h2>
   <div class="chips">{chips_html}</div>{sortbar_html}{table_html}</div>
