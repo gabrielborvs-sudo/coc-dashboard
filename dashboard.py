@@ -551,9 +551,16 @@ CSS = """
   .abt-quote { position:absolute; right:16px; top:-26px; font-size:120px;
                font-family:var(--display); color:var(--ink); opacity:.05;
                pointer-events:none; line-height:1; user-select:none; }
-  .join-row { display:flex; align-items:center; gap:20px; flex-wrap:wrap;
-              margin-top:16px; padding-top:16px;
-              border-top:1px solid var(--line); }
+  td.dt { white-space:nowrap; }   /* dates always stay on one line */
+  .join-row { display:flex; align-items:center; justify-content:space-between;
+              gap:18px; flex-wrap:wrap; margin-top:18px; padding:16px 20px;
+              background:var(--card-2); border:1px solid var(--line);
+              border-radius:12px; }
+  @media (max-width:620px) {
+    .join-row { flex-direction:column; align-items:center; gap:16px;
+                padding:18px 16px; }
+    .join-btn { width:100%; justify-content:center; }
+  }
   .join-btn { display:inline-flex; align-items:center; gap:9px;
               font-family:var(--display); font-weight:700; font-size:14px;
               letter-spacing:.4px; color:#1a1206; text-decoration:none;
@@ -2371,7 +2378,7 @@ def build_page(data, live_seconds=None):
             except Exception:
                 d = "?"
             past_rows.append(
-                f'<tr><td>{d}</td>'
+                f'<tr><td class="dt">{d}</td>'
                 f'<td class="num">{s.get("capitalTotalLoot", 0):,}</td>'
                 f'<td class="num">{s.get("raidsCompleted", 0)}</td>'
                 f'<td class="num">{s.get("totalAttacks", 0)}</td>'
