@@ -970,9 +970,16 @@ CSS = """
              padding:2.5px 6px 2.5px 3px; margin-left:11px; }
   .otag-sm::before { width:10px; height:10px; }
   /* friend variant: same pentagon and name, but solid-filled - outline
-     means their own account, filled means a friend they brought in */
-  .otag-fill { background:var(--ot); border-color:var(--ot); color:#10141b; }
-  .otag-fill::before { background:var(--ot); border:none; }
+     means their own account, filled means a friend they brought in.
+     A clip-path pentagon replaces the border-trick tip (seamless fill). */
+  .otag-fill { background:var(--ot); border:none; border-radius:0;
+               color:#10141b; margin-left:9px;
+               padding:4px 8px 4px 12px;
+               clip-path:polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%); }
+  .otag-fill::before { display:none; }
+  .otag-fill .ot { color:inherit; }
+  .otag-sm.otag-fill { margin-left:8px; padding:3px 6px 3px 9px;
+               clip-path:polygon(6px 0, 100% 0, 100% 100%, 6px 100%, 0 50%); }
   .role-leader   { color:#e8c25a; border-color:rgba(232,194,90,.45); }
   .role-coLeader { color:var(--violet); border-color:rgba(143,135,216,.45); }
   .role-admin    { color:var(--aqua); border-color:rgba(46,165,131,.45); }
