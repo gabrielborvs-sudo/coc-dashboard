@@ -113,7 +113,7 @@ def owner_tag(tag, small=False):
     f = FRIEND_OF.get(tag)
     if f and f in OWNER_HUE:
         return (f'<span class="otag otag-fill{sm}" style="--ot:{OWNER_HUE[f]}"'
-                f' title="friend of {esc(f)}"><span class="ot">&nbsp;</span></span>')
+                f' title="friend of {esc(f)}"><span class="ot">{esc(f)}</span></span>')
     return ""
 
 
@@ -969,8 +969,9 @@ CSS = """
   .otag-sm { font-size:7.5px; letter-spacing:.9px;
              padding:2.5px 6px 2.5px 3px; margin-left:11px; }
   .otag-sm::before { width:10px; height:10px; }
-  /* friend variant: same pentagon, no name, solid fill in the inviter's color */
-  .otag-fill { background:var(--ot); border-color:var(--ot); min-width:10px; }
+  /* friend variant: same pentagon and name, but solid-filled - outline
+     means their own account, filled means a friend they brought in */
+  .otag-fill { background:var(--ot); border-color:var(--ot); color:#10141b; }
   .otag-fill::before { background:var(--ot); border:none; }
   .role-leader   { color:#e8c25a; border-color:rgba(232,194,90,.45); }
   .role-coLeader { color:var(--violet); border-color:rgba(143,135,216,.45); }
@@ -1443,8 +1444,8 @@ PAGE_JS = """
     box.innerHTML =
       `<div class="detail-head">` + thImg(m.th, 46) +
       `<div><div class="n">${escj(m.name)}` +
-      (m.owner ? `<span class="otag" style="--ot:${m.ohue}"><span class="ot">${escj(m.owner)}</span></span>`
-       : m.fr ? `<span class="otag otag-fill" style="--ot:${m.ohue}"><span class="ot">&nbsp;</span></span>` : '') +
+      (m.owner ? `<span class="otag${m.fr ? ' otag-fill' : ''}" style="--ot:${m.ohue}">` +
+                 `<span class="ot">${escj(m.owner)}</span></span>` : '') +
       `</div>` +
       `<div class="quiet">${escj(m.tag)} &middot; ${escj(m.roleName)} &middot; TH${m.th} &middot; XP ${m.xp}` +
       (m.league ? ` &middot; ${escj(m.league)}` : '') +
@@ -1659,7 +1660,9 @@ def _member_payload(m, profiles, eqmap=None):
         "best": m["trophies"], "warStars": 0, "capital": 0,
         "league": (m.get("league") or {}).get("name", ""), "heroes": [],
         "troops": [], "spells": [],
-        "owner": OWNER_OF.get(m["tag"], ""),
+        "owner": (OWNER_OF.get(m["tag"])
+                  or (FRIEND_OF.get(m["tag"])
+                      if FRIEND_OF.get(m["tag"]) in OWNER_HUE else "") or ""),
         "fr": (not OWNER_OF.get(m["tag"])
                and FRIEND_OF.get(m["tag"]) in OWNER_HUE),
         "ohue": OWNER_HUE.get(OWNER_OF.get(m["tag"])
