@@ -62,7 +62,7 @@ def owner_tag(tag, small=False):
         return ""
     sm = " otag-sm" if small else ""
     return (f'<span class="otag{sm}" style="--ot:var({OWNER_HUE[o]})">'
-            f'{esc(o)}</span>')
+            f'<span class="ot">{esc(o)}</span></span>')
 
 
 def _norm(name):
@@ -901,19 +901,17 @@ CSS = """
   .role-chip { font-size:10.5px; padding:3px 9px; border-radius:6px;
                background:transparent; color:var(--ink-2); white-space:nowrap;
                border:1px solid var(--line-2); letter-spacing:.3px; }
-  /* owner badge: identifies the human behind an account */
-  .otag { display:inline-flex; align-items:center; gap:5px; margin-left:8px;
-          font:700 9px var(--display); letter-spacing:1.2px;
-          text-transform:uppercase; color:var(--ot);
-          border:1px solid color-mix(in srgb, var(--ot) 45%, transparent);
-          background:color-mix(in srgb, var(--ot) 9%, transparent);
-          border-radius:5px; padding:2.5px 7px; vertical-align:2px;
-          white-space:nowrap; }
-  .otag::before { content:''; width:4px; height:4px; border-radius:50%;
-                  background:var(--ot);
-                  box-shadow:0 0 5px color-mix(in srgb, var(--ot) 80%, transparent); }
-  .otag-sm { font-size:8px; padding:1.5px 5px; margin-left:6px; gap:4px;
-             letter-spacing:1px; }
+  /* owner badge: slanted ID plate - same quiet outline language as the
+     role chips, but a distinct silhouette so it never reads as a role */
+  .otag { display:inline-block; margin-left:9px; transform:skewX(-14deg);
+          border:1px solid color-mix(in srgb, var(--ot) 50%, transparent);
+          border-left:3px solid var(--ot); border-radius:3px;
+          padding:1.5px 8px; vertical-align:1px; }
+  .otag .ot { display:inline-block; transform:skewX(14deg);
+              font:700 9px var(--display); letter-spacing:1.2px;
+              text-transform:uppercase; color:var(--ot); white-space:nowrap; }
+  .otag-sm { padding:1px 6px; margin-left:7px; }
+  .otag-sm .ot { font-size:7.5px; letter-spacing:1px; }
   .role-leader   { color:#e8c25a; border-color:rgba(232,194,90,.45); }
   .role-coLeader { color:var(--violet); border-color:rgba(143,135,216,.45); }
   .role-admin    { color:var(--aqua); border-color:rgba(46,165,131,.45); }
@@ -1383,7 +1381,7 @@ PAGE_JS = """
     box.innerHTML =
       `<div class="detail-head">` + thImg(m.th, 46) +
       `<div><div class="n">${escj(m.name)}` +
-      (m.owner ? `<span class="otag" style="--ot:var(${m.ohue})">${escj(m.owner)}</span>` : '') +
+      (m.owner ? `<span class="otag" style="--ot:var(${m.ohue})"><span class="ot">${escj(m.owner)}</span></span>` : '') +
       `</div>` +
       `<div class="quiet">${escj(m.tag)} &middot; ${escj(m.roleName)} &middot; TH${m.th} &middot; XP ${m.xp}` +
       (m.league ? ` &middot; ${escj(m.league)}` : '') +
