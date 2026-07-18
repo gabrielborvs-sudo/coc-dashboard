@@ -39,6 +39,31 @@ JOIN_LINK = ("https://link.clashofclans.com/en?action=OpenClanProfile&tag="
 _QR_FILE = Path(__file__).resolve().parent / "join_qr.svg"
 JOIN_QR = _QR_FILE.read_text(encoding="ascii") if _QR_FILE.exists() else ""
 
+# ------------------------------ owner tags ----------------------------------
+# Who plays which accounts. Add a person and their account tags here and a
+# small colored badge with their name appears on those accounts everywhere
+# (members list, profiles, war roster). Colors are assigned automatically.
+OWNERS = {
+    "Gabo": ["#QRQPP0G0G",   # PARENG G!
+             "#QGRY0YCQ2",   # Borvs
+             "#8PJG2UY0Q",   # Andeng
+             "#2UGJV89VC"],  # ChrisTine
+}
+_OWNER_HUES = ["--gold", "--aqua", "--violet", "--magenta", "--blue",
+               "--orange", "--green", "--red"]
+OWNER_OF = {t: n for n, tags in OWNERS.items() for t in tags}
+OWNER_HUE = {n: _OWNER_HUES[i % len(_OWNER_HUES)] for i, n in enumerate(OWNERS)}
+
+
+def owner_tag(tag, small=False):
+    """Small colored badge naming the human behind an account."""
+    o = OWNER_OF.get(tag)
+    if not o:
+        return ""
+    sm = " otag-sm" if small else ""
+    return (f'<span class="otag{sm}" style="--ot:var({OWNER_HUE[o]})">'
+            f'{esc(o)}</span>')
+
 
 def _norm(name):
     """Normalize a unit name for icon lookup: lowercase, alphanumerics only."""
@@ -876,6 +901,19 @@ CSS = """
   .role-chip { font-size:10.5px; padding:3px 9px; border-radius:6px;
                background:transparent; color:var(--ink-2); white-space:nowrap;
                border:1px solid var(--line-2); letter-spacing:.3px; }
+  /* owner badge: identifies the human behind an account */
+  .otag { display:inline-flex; align-items:center; gap:5px; margin-left:8px;
+          font:700 9px var(--display); letter-spacing:1.2px;
+          text-transform:uppercase; color:var(--ot);
+          border:1px solid color-mix(in srgb, var(--ot) 45%, transparent);
+          background:color-mix(in srgb, var(--ot) 9%, transparent);
+          border-radius:5px; padding:2.5px 7px; vertical-align:2px;
+          white-space:nowrap; }
+  .otag::before { content:''; width:4px; height:4px; border-radius:50%;
+                  background:var(--ot);
+                  box-shadow:0 0 5px color-mix(in srgb, var(--ot) 80%, transparent); }
+  .otag-sm { font-size:8px; padding:1.5px 5px; margin-left:6px; gap:4px;
+             letter-spacing:1px; }
   .role-leader   { color:#e8c25a; border-color:rgba(232,194,90,.45); }
   .role-coLeader { color:var(--violet); border-color:rgba(143,135,216,.45); }
   .role-admin    { color:var(--aqua); border-color:rgba(46,165,131,.45); }
@@ -1344,7 +1382,9 @@ PAGE_JS = """
     }
     box.innerHTML =
       `<div class="detail-head">` + thImg(m.th, 46) +
-      `<div><div class="n">${escj(m.name)}</div>` +
+      `<div><div class="n">${escj(m.name)}` +
+      (m.owner ? `<span class="otag" style="--ot:var(${m.ohue})">${escj(m.owner)}</span>` : '') +
+      `</div>` +
       `<div class="quiet">${escj(m.tag)} &middot; ${escj(m.roleName)} &middot; TH${m.th} &middot; XP ${m.xp}` +
       (m.league ? ` &middot; ${escj(m.league)}` : '') +
       (m.rush != null ? ` &middot; rush ${m.rush}%` : '') + `</div></div>` +
@@ -1552,6 +1592,8 @@ def _member_payload(m, profiles, eqmap=None):
         "best": m["trophies"], "warStars": 0, "capital": 0,
         "league": (m.get("league") or {}).get("name", ""), "heroes": [],
         "troops": [], "spells": [],
+        "owner": OWNER_OF.get(m["tag"], ""),
+        "ohue": OWNER_HUE.get(OWNER_OF.get(m["tag"], ""), "--gold"),
     }
     if p:
         th = p.get("townHallLevel", base["th"])
@@ -1809,7 +1851,8 @@ def build_page(data, live_seconds=None):
                 rows.append(
                     f'<tr{row_cls}><td class="num">{m["mapPosition"]}</td>'
                     f'<td><div class="rmem">{th_avatar(m.get("townhallLevel"), 26)}'
-                    f'<div>{esc(m["name"])}<div class="att-target">TH{m.get("townhallLevel", "?")}</div></div>'
+                    f'<div>{esc(m["name"])}{owner_tag(m["tag"], small=True)}'
+                    f'<div class="att-target">TH{m.get("townhallLevel", "?")}</div></div>'
                     f'</div></td>'
                     f'{cells}<td class="num">{status}</td></tr>')
 
@@ -1824,7 +1867,8 @@ def build_page(data, live_seconds=None):
                     f'<div class="ritem{card_cls}">'
                     f'<span class="rk">{m["mapPosition"]}</span>'
                     f'{th_avatar(m.get("townhallLevel"), 24)}'
-                    f'<div class="ri-main"><div class="mi-name">{esc(m["name"])} '
+                    f'<div class="ri-main"><div class="mi-name">{esc(m["name"])}'
+                    f'{owner_tag(m["tag"], small=True)} '
                     f'<span class="att-target">TH{m.get("townhallLevel", "?")}</span></div>'
                     f'{atk_line}</div>'
                     f'<div class="ri-status">{status}</div></div>')
@@ -2046,7 +2090,7 @@ def build_page(data, live_seconds=None):
             f'<span class="rk{rk_cls}">{i}</span>'
             f'{th_avatar(md["th"], 34)}'
             f'<div class="mi-main">'
-            f'<div class="mi-name">{esc(m["name"])}</div>'
+            f'<div class="mi-name">{esc(m["name"])}{owner_tag(m["tag"], small=True)}</div>'
             f'<div class="mi-sub"><span class="role-chip role-{m["role"]}">'
             f'{ROLE_NAMES.get(m["role"], m["role"])}</span> '
             f'XP {md["xp"]} &middot; &#127942; {m["trophies"]:,} &middot; {rush_html}</div>'
@@ -2060,7 +2104,7 @@ def build_page(data, live_seconds=None):
             f'data-tro="{m["trophies"]}" data-th="{md["th"]}" data-xp="{md["xp"]}" '
             f'data-rush="{rush_attr}">'
             f'<td class="num"><span class="rk{rk_cls}">{i}</span></td>'
-            f'<td>{th_avatar(md["th"])}{esc(m["name"])}</td>'
+            f'<td>{th_avatar(md["th"])}{esc(m["name"])}{owner_tag(m["tag"])}</td>'
             f'<td><span class="role-chip role-{m["role"]}">{ROLE_NAMES.get(m["role"], m["role"])}</span></td>'
             f'<td class="num">{md["xp"]}</td>'
             f'<td class="num">{m["trophies"]:,}</td>'
