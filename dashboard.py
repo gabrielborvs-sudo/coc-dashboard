@@ -48,6 +48,26 @@ OWNERS = {
              "#QGRY0YCQ2",   # Borvs
              "#8PJG2UY0Q",   # Andeng
              "#2UGJV89VC"],  # ChrisTine
+    "Wing": ["#9CGGPPRJ",    # greenie
+             "#9RP8JUQ2",    # Lou Lou
+             "#LJLPLCCP",    # Cole
+             "#G2PLCLJCR",   # Snakey
+             "#GJ922UCGL",   # Wingull2.0
+             "#GRPLVU299",   # Wingull3.0
+             "#G9UL02PUV"],  # Sylvie
+    "Ced":  ["#PCUPRYL2",    # AsTrOzErO4
+             "#PY8GPLY0"],   # ColinJ
+    "Bry":  ["#802LLQP8C",   # cookie
+             "#LLY8J9Q0V",   # mcdo
+             "#2Y2YP0CRV",   # diamante
+             "#Q89LCJVYC"],  # DONUTBAE
+    "Jolo": ["#R2JQYGUU9",   # ArvinSaints06
+             "#R22U2LQR"],   # quiche
+    "kido": ["#LYUVV2J0L",   # ZECHS
+             "#R9LPJR9LL",   # SokkaWaterTribe
+             "#QPVVPGL80"],  # FreakyNikki
+    "Nabi": ["#QUU9L0CCC",   # Nabi
+             "#GUCPCY0CC"],  # Laney'sDog
 }
 _OWNER_HUES = ["--gold", "--aqua", "--violet", "--magenta", "--blue",
                "--orange", "--green", "--red"]
