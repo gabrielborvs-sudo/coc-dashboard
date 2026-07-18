@@ -921,17 +921,22 @@ CSS = """
   .role-chip { font-size:10.5px; padding:3px 9px; border-radius:6px;
                background:transparent; color:var(--ink-2); white-space:nowrap;
                border:1px solid var(--line-2); letter-spacing:.3px; }
-  /* owner badge: slanted ID plate - same quiet outline language as the
-     role chips, but a distinct silhouette so it never reads as a role */
-  .otag { display:inline-block; margin-left:9px; transform:skewX(-14deg);
+  /* owner badge: pen-shaped pentagon plate, tip pointing at the name.
+     Outline-only, as quiet as a role chip - just in the owner's color. */
+  .otag { position:relative; display:inline-block; margin-left:13px;
+          font:700 9px var(--display); letter-spacing:1.1px; line-height:1;
+          text-transform:uppercase; color:var(--ot);
           border:1px solid color-mix(in srgb, var(--ot) 50%, transparent);
-          border-left:3px solid var(--ot); border-radius:3px;
-          padding:1.5px 8px; vertical-align:1px; }
-  .otag .ot { display:inline-block; transform:skewX(14deg);
-              font:700 9px var(--display); letter-spacing:1.2px;
-              text-transform:uppercase; color:var(--ot); white-space:nowrap; }
-  .otag-sm { padding:1px 6px; margin-left:7px; }
-  .otag-sm .ot { font-size:7.5px; letter-spacing:1px; }
+          border-left:none; border-radius:0 4px 4px 0;
+          padding:3px 8px 3px 4px; vertical-align:1px; white-space:nowrap; }
+  .otag::before { content:''; position:absolute; top:50%; left:0;
+          width:12px; height:12px;
+          transform:translate(-50%, -50%) rotate(45deg);
+          border-left:1px solid color-mix(in srgb, var(--ot) 50%, transparent);
+          border-bottom:1px solid color-mix(in srgb, var(--ot) 50%, transparent); }
+  .otag-sm { font-size:7.5px; letter-spacing:.9px;
+             padding:2.5px 6px 2.5px 3px; margin-left:11px; }
+  .otag-sm::before { width:10px; height:10px; }
   .role-leader   { color:#e8c25a; border-color:rgba(232,194,90,.45); }
   .role-coLeader { color:var(--violet); border-color:rgba(143,135,216,.45); }
   .role-admin    { color:var(--aqua); border-color:rgba(46,165,131,.45); }
