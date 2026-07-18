@@ -1017,8 +1017,10 @@ CSS = """
   .mi-name { font-weight:600; font-size:14px; white-space:nowrap;
              overflow:hidden; text-overflow:ellipsis; }
   .mi-sub { color:var(--muted); font-size:10.5px; margin-top:3px;
+            line-height:1.8;   /* tall enough that the role chip never clips */
             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .mi-sub .role-chip { font-size:9px; padding:1px 6px; margin-right:2px; }
+  .mi-sub .role-chip { font-size:9px; padding:1px 6px; margin-right:2px;
+                       vertical-align:middle; }
   .mi-right { text-align:right; flex:none; }
   .mi-don { font-size:13.5px; font-variant-numeric:tabular-nums; font-weight:600; }
   .mi-right .mi-sub { text-align:right; }
