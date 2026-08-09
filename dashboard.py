@@ -75,13 +75,16 @@ OWNERS = {
     "Daren": ["#P8Q02990L"], # QT Prime
     "Suwa": ["#GUUJLYYVC"],  # GXN
     "Otep": ["#J2YPPQ22",    # rey pinyoko
-             "#R2QG8QL8J"],  # Gabby
+             "#R2QG8QL8J",   # Gabby
+             "#80GQGCQ8"],   # otep
     "Drey": ["#CPGPR9C0"],   # JOHNANDREYDR
     "Coach": ["#2LP0Y892J"], # BEST CoC GaMeR
     "zql":  ["#L9GVQR0GV",   # PewPew
              "#GJGL89QYG"],  # zql
     "Ian":  ["#QCYLYGQJV",   # ian
              "#QUJ0LJCUU"],  # khaleesi
+    "Ash":  ["#GCG2J9JLL"],  # Gaiahh
+    "Allen": ["#R88YC28LV"], # SunrakuAI
 }
 
 # Accounts brought in by a member's friend: same pentagon tag but FILLED
@@ -89,9 +92,15 @@ OWNERS = {
 FRIENDS = {
     "Josh":  ["#YGJR9P82"],   # Ace
     "Nabi":  ["#CURCPR9V",    # BIRDMAN
-              "#GJJ0880Y8"],  # Smile'N
+              "#GJJ0880Y8",   # Smile'N
+              "#CLVPULL",     # NeoVentuno
+              "#LUL0R8CY0",   # Hera II
+              "#GUU2YQCGL",   # Emi
+              "#R08GCL9RC"],  # Manju
     "Daren": ["#GVGGV0PUR"],  # Kamekaze
-    "Jolo":  ["#L9GVQ9L8"],   # Yolol
+    "Jolo":  ["#L9GVQ9L8",    # Yolol
+              "#R8899JQLR"],  # Yerimeise
+    "Drey":  ["#LJUVV8QQ"],   # Kenji
 }
 
 _OWNER_HUES = ["#e8a33d", "#2ea583", "#8f87d8", "#c76490", "#4d8fe0",
