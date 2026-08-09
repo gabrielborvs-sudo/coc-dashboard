@@ -239,12 +239,25 @@ def fetch_all(key):
 
     # CWL: during league week the normal war endpoint reports notInWar
     cwl_round = None
+    cwl_wars = []
     if (war is None) or war.get("state") == "notInWar":
         lg, _lg_err = fetch(f"/clans/{enc(CLAN_TAG)}/currentwar/leaguegroup", key)
         if lg and lg.get("rounds"):
             cw, rnd = _resolve_cwl_war(lg, key)
             if cw:
                 war, w_err, cwl_round = cw, None, rnd
+            # every war of every round - feeds the CWL standings table
+            tags = [t for r in lg.get("rounds", [])
+                    for t in r.get("warTags", []) if t and t != "#0"]
+
+            def _grab_war(t):
+                w2, _ = fetch(f"/clanwarleagues/wars/{enc(t)}", key)
+                return w2
+
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                cwl_wars = [w2 for w2 in pool.map(_grab_war, tags) if w2]
+
+    goldpass, _gp_err = fetch("/goldpass/seasons/current", key)
 
     warlog, wl_err = fetch(f"/clans/{enc(CLAN_TAG)}/warlog?limit=20", key)
     raids, r_err = fetch(f"/clans/{enc(CLAN_TAG)}/capitalraidseasons?limit=6", key)
@@ -271,10 +284,11 @@ def fetch_all(key):
                 if p:
                     profiles[tag] = p
     return {"clan": clan, "c_err": c_err, "war": war, "w_err": w_err,
-            "cwl_round": cwl_round, "warlog": warlog, "wl_err": wl_err,
+            "cwl_round": cwl_round, "cwl_wars": cwl_wars,
+            "warlog": warlog, "wl_err": wl_err,
             "raids": raids, "r_err": r_err, "profiles": profiles,
             "opp_clan": opp_clan, "opp_warlog": opp_warlog,
-            "opp_wl_err": opp_wl_err}
+            "opp_wl_err": opp_wl_err, "goldpass": goldpass}
 
 
 def enc(tag):
@@ -1247,6 +1261,79 @@ CSS = """
   .table-scroll::-webkit-scrollbar-thumb { background:var(--card-3); border-radius:3px; }
   .table-scroll { scrollbar-width:thin; scrollbar-color:var(--card-3) transparent; }
 
+  /* ---------- gold pass strip ---------- */
+  .gp-strip { display:flex; align-items:center; gap:8px; margin-top:14px;
+              padding:10px 14px; border:1px solid rgba(232,194,90,.25);
+              background:color-mix(in srgb, #e8c25a 6%, transparent);
+              border-radius:10px; font-size:12.5px; color:var(--ink-2);
+              flex-wrap:wrap; }
+  .gp-strip b { color:#e8c25a; }
+  .gp-ico { font-size:14px; }
+
+  /* ---------- town hall spread ---------- */
+  .thd { display:flex; flex-direction:column; gap:6px; }
+  .thd-row { display:flex; align-items:center; gap:10px; }
+  .thd-row .th-av { margin-right:0; flex:none; }
+  .thd-bar { flex:1; height:8px; background:rgba(255,255,255,.05);
+             border-radius:4px; overflow:hidden; }
+  .thd-bar div { height:100%; border-radius:4px;
+                 background:linear-gradient(90deg, var(--accent), #f2d491);
+                 animation:grow .8s cubic-bezier(.2,.7,.3,1); }
+  .thd-n { width:26px; text-align:right; font-family:var(--display);
+           font-weight:700; font-size:13px; color:var(--ink-2); }
+
+  /* ---------- attack timeline ---------- */
+  .tl { display:flex; flex-direction:column; max-height:440px; overflow-y:auto; }
+  .tl-item { display:flex; align-items:baseline; gap:10px; padding:8px 4px 8px 10px;
+             border-bottom:1px solid var(--line); font-size:13px; }
+  .tl-item:last-child { border-bottom:none; }
+  .tl-item.tl-us { box-shadow:inset 3px 0 0 var(--green); }
+  .tl-item.tl-them { box-shadow:inset 3px 0 0 var(--red);
+                     background:rgba(224,96,96,.04); }
+  .tl-order { font-family:var(--display); font-weight:700; font-size:11px;
+              color:var(--muted); flex:none; width:28px; }
+  .tl-body { min-width:0; }
+  .tl-sub { margin-left:8px; white-space:nowrap; }
+
+  /* ---------- war MVP + CWL ---------- */
+  .mvpchip { font-family:var(--display); font-size:9px; font-weight:700;
+             letter-spacing:1.2px; color:#1a1206; border-radius:5px;
+             background:linear-gradient(180deg, #f2c86e, #e8a33d);
+             padding:2.5px 7px; margin-left:7px; vertical-align:1px;
+             white-space:nowrap; }
+  tr.cwl-us td { background:color-mix(in srgb, var(--accent) 8%, transparent); }
+  tr.cwl-us td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
+
+  /* ---------- war opt-in badge ---------- */
+  .wpb { margin-left:7px; font-size:11px; cursor:default; }
+  .wpb.wp-in { color:var(--green); }
+  .wpb.wp-out { color:var(--muted); opacity:.8; }
+  .mi-sub .wpb { margin:0 4px 0 0; font-size:10px; }
+
+  /* ---------- member search ---------- */
+  .msearch { width:100%; margin-bottom:12px; padding:10px 14px;
+             font:500 13.5px var(--body); color:var(--ink);
+             background:var(--card-2); border:1px solid var(--line-2);
+             border-radius:10px; outline:none;
+             transition:border-color .15s; }
+  .msearch:focus { border-color:color-mix(in srgb, var(--accent) 55%, transparent); }
+  .msearch::placeholder { color:var(--muted); }
+
+  /* ---------- victory confetti ---------- */
+  .cfx { position:fixed; top:-14px; z-index:80; pointer-events:none;
+         border-radius:2px; animation:cfall 2.6s linear forwards; }
+  @keyframes cfall {
+    to { transform:translateY(108vh) rotate(680deg); opacity:.1; } }
+
+  /* ---------- image shimmer placeholders ---------- */
+  img.ui, .th-av img, img.hero-ico {
+    background:linear-gradient(100deg, rgba(255,255,255,.035) 40%,
+               rgba(255,255,255,.09) 50%, rgba(255,255,255,.035) 60%);
+    background-size:220% 100%; animation:shim 1.1s linear infinite;
+    border-radius:8px; }
+  img.ld { background:none; animation:none; }
+  @keyframes shim { to { background-position:-120% 0; } }
+
   /* accessibility: users who prefer reduced motion get a still page */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -1332,12 +1419,22 @@ PAGE_JS = """
   function activate(name) {
     tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
     panels.forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+    document.title = (name === 'overview' ? CLAN_NAME + ' - War Room'
+      : name.charAt(0).toUpperCase() + name.slice(1) + ' · ' + CLAN_NAME);
+    try { history.replaceState(null, '', '#' + name); } catch (e) {}
     try { localStorage.setItem('coc-tab', name); } catch (e) {}
   }
   tabs.forEach(t => t.addEventListener('click', () => activate(t.dataset.tab)));
   let saved = null;
   try { saved = localStorage.getItem('coc-tab'); } catch (e) {}
-  activate(saved && document.getElementById('panel-' + saved) ? saved : 'overview');
+  const hashTab = location.hash.replace('#', '');
+  const startTab = document.getElementById('panel-' + hashTab) ? hashTab
+    : (saved && document.getElementById('panel-' + saved) ? saved : 'overview');
+  activate(startTab);
+  window.addEventListener('hashchange', () => {
+    const h = location.hash.replace('#', '');
+    if (document.getElementById('panel-' + h)) activate(h);
+  });
 
   document.querySelectorAll('[data-count]').forEach(el => {
     const target = parseFloat(el.dataset.count);
@@ -1475,7 +1572,10 @@ PAGE_JS = """
       `</div>` +
       `<div class="quiet">${escj(m.tag)} &middot; ${escj(m.roleName)} &middot; TH${m.th} &middot; XP ${m.xp}` +
       (m.league ? ` &middot; ${escj(m.league)}` : '') +
-      (m.rush != null ? ` &middot; rush ${m.rush}%` : '') + `</div></div>` +
+      (m.rush != null ? ` &middot; rush ${m.rush}%` : '') +
+      (m.wp === 'in' ? ` &middot; <span class="c-green">&#9876; war: in</span>`
+        : m.wp === 'out' ? ` &middot; <span class="c-red">&#128164; war: out</span>` : '') +
+      `</div></div>` +
       `<button class="detail-close" onclick="hideMember()">&#10005; close</button></div>` +
       `<div class="detail-tiles">` +
       tile(fmt(m.trophies), 'Trophies', 'best ' + fmt(m.best), '--gold') +
@@ -1484,7 +1584,20 @@ PAGE_JS = """
       tile(fmt(m.received), 'Received', 'season', '--blue') +
       tile(ratio, 'Give / take', 'ratio', '--green') +
       tile(fmt(m.capital), 'Capital gold', 'all-time', '--orange') +
-      `</div><h2>Heroes</h2>` + heroesHtml +
+      `</div>` +
+      (m.life ? `<h2 style="margin-top:4px">Lifetime</h2><div class="detail-tiles">` +
+        tile(fmt(m.life.don), 'Donated', 'all-time troops', '--aqua') +
+        tile(fmt(m.life.att), 'Attack wins', 'all-time', '--red') +
+        tile(fmt(m.life.def), 'Defense wins', 'all-time', '--blue') +
+        tile(fmt(m.life.games), 'Clan games', 'points', '--violet') +
+        tile(fmt(m.life.raid), 'Raid loot', 'all-time', '--orange') +
+        tile(fmt(m.life.obst), 'Obstacles', 'cleared', '--green') +
+        `</div>` : '') +
+      (m.bh ? `<h2 style="margin-top:4px">Builder base</h2><div class="detail-tiles">` +
+        tile('BH ' + m.bh, 'Builder Hall', m.bbl || 'no league', '--gold') +
+        tile(fmt(m.bbt), 'Trophies', 'best ' + fmt(m.bbb), '--magenta') +
+        `</div>` : '') +
+      `<h2>Heroes</h2>` + heroesHtml +
       `<h2 style="margin-top:20px">Troops</h2>` + unitGrid(m.troops) +
       `<h2 style="margin-top:20px">Spells</h2>` + unitGrid(m.spells);
     const back = document.getElementById('member-back');
@@ -1579,6 +1692,51 @@ PAGE_JS = """
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeInfo(); });
   document.querySelectorAll('[data-info]').forEach(el =>
     el.addEventListener('click', e => { e.stopPropagation(); openInfo(); }));
+
+  // ---------------- member search ----------------
+  const msearch = document.getElementById('msearch');
+  if (msearch) msearch.addEventListener('input', () => {
+    const q = msearch.value.trim().toLowerCase();
+    document.querySelectorAll('#members-table tbody tr[data-tag], .mitem[data-tag]')
+      .forEach(el => {
+        const m = MEMBERS[el.dataset.tag] || {};
+        const hay = ((m.name || '') + ' ' + (m.owner || '')).toLowerCase();
+        el.hidden = !!q && !hay.includes(q);
+      });
+  });
+
+  // ---------------- victory confetti (once per won war) ----------------
+  if (WAR_FX && WAR_FX.won
+      && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const key = 'confetti-' + WAR_FX.id;
+    let seen = null;
+    try { seen = localStorage.getItem(key); } catch (e) {}
+    if (!seen) {
+      try { localStorage.setItem(key, '1'); } catch (e) {}
+      const cols = ['#e8c25a', '#48b865', '#4d8fe0', '#e06060', '#8f87d8', '#f2d491'];
+      for (let i = 0; i < 70; i++) {
+        const s = document.createElement('span');
+        s.className = 'cfx';
+        s.style.left = (Math.random() * 100) + 'vw';
+        s.style.background = cols[i % cols.length];
+        s.style.animationDelay = (Math.random() * 1.2) + 's';
+        s.style.animationDuration = (2.2 + Math.random() * 1.5) + 's';
+        const sz = (5 + Math.random() * 5).toFixed(0) + 'px';
+        s.style.width = sz; s.style.height = sz;
+        if (i % 3 === 0) s.style.borderRadius = '50%';
+        document.body.appendChild(s);
+      }
+      setTimeout(() => document.querySelectorAll('.cfx').forEach(el => el.remove()), 5500);
+    }
+  }
+
+  // ---------------- icon shimmer: placeholder until each image loads --------
+  document.addEventListener('load', e => {
+    if (e.target && e.target.tagName === 'IMG') e.target.classList.add('ld');
+  }, true);
+  document.querySelectorAll('img').forEach(im => {
+    if (im.complete) im.classList.add('ld');
+  });
 
   // ---------------- war roster: team / enemy switch ----------------
   // Defaults to our team; the choice survives the live auto-reload.
@@ -1741,6 +1899,8 @@ def _member_payload(m, profiles, eqmap=None):
                                          e["level"]),
                                 "on": False} for e in rest]})
 
+        ach = {a.get("name"): a.get("value", 0)
+               for a in p.get("achievements", [])}
         base.update({
             "th": th,
             "xp": p.get("expLevel", base["xp"]),
@@ -1750,6 +1910,19 @@ def _member_payload(m, profiles, eqmap=None):
             "heroes": heroes,
             "troops": unit_list("troops"),
             "spells": unit_list("spells"),
+            "wp": p.get("warPreference", ""),
+            "bh": p.get("builderHallLevel", 0),
+            "bbt": p.get("builderBaseTrophies", 0),
+            "bbb": p.get("bestBuilderBaseTrophies", 0),
+            "bbl": (p.get("builderBaseLeague") or {}).get("name", ""),
+            "life": {
+                "don": ach.get("Friend in Need", 0),
+                "att": ach.get("Conqueror", 0),
+                "def": ach.get("Unbreakable", 0),
+                "games": ach.get("Games Champion", 0),
+                "raid": ach.get("Aggressive Capitalism", 0),
+                "obst": ach.get("Nice and Tidy", 0),
+            },
         })
     base["rush"] = rush_score(base["th"], p)
     return base
@@ -1835,6 +2008,9 @@ def build_page(data, live_seconds=None):
     # ------------------------------ war panel -------------------------------
     roster_html = ""
     scout_html = ""
+    timeline_html = ""
+    topatk_html = ""
+    war_fx = {"won": False, "id": ""}
     war_cls = ""          # tints the war cards green/red once the war ends
     war_tab_cls = ""      # tints the "War" nav button
     glance_cls = ""       # overview card: red in battle, green in prep,
@@ -1874,6 +2050,7 @@ def build_page(data, live_seconds=None):
             war_cls = " war-won" if won else " war-lost"
             war_tab_cls = " tab-won" if won else " tab-lost"
             glance_cls = " glance-won" if won else " glance-lost"
+            war_fx = {"won": won, "id": war.get("endTime", "")}
         if cwl_round:
             label = f"CWL Round {cwl_round} &middot; {label}"
 
@@ -2113,6 +2290,65 @@ def build_page(data, live_seconds=None):
         </table></div>
         {note}</div>"""
 
+        # --------------------------- attack timeline --------------------------
+        events = []
+        for side_key, sc, dmap in (("us", us, them_map), ("them", them, us_map)):
+            for mm in sc.get("members", []):
+                for a in mm.get("attacks", []):
+                    d = dmap.get(a.get("defenderTag"), {})
+                    events.append((a.get("order", 0), side_key, mm, a, d))
+        events.sort(key=lambda x: -x[0])
+        if events and state != "preparation":
+            tl_items = []
+            for order, side_key, mm, a, d in events:
+                cls = "tl-us" if side_key == "us" else "tl-them"
+                otag = owner_tag(mm["tag"], small=True) if side_key == "us" else ""
+                tl_items.append(
+                    f'<div class="tl-item {cls}">'
+                    f'<span class="tl-order">#{order}</span>'
+                    f'<div class="tl-body"><b>{esc(mm["name"])}</b>{otag} '
+                    f'<span class="quiet">hit</span> '
+                    f'<b>#{d.get("mapPosition", "?")} {esc(d.get("name", "?"))}</b>'
+                    f'<span class="tl-sub">{stars_str(a["stars"])} '
+                    f'<span class="att-pct">{a["destructionPercentage"]}%</span></span>'
+                    f'</div></div>')
+            timeline_html = (f'<div class="card"><h2>Attack timeline</h2>'
+                            f'<p class="quiet" style="margin-bottom:10px">Every attack '
+                            f'this war, newest first. <span class="c-green">&#9632;</span> us '
+                            f'&middot; <span class="c-red">&#9632;</span> them.</p>'
+                            f'<div class="tl">{"".join(tl_items)}</div></div>')
+
+        # --------------------------- top attackers ----------------------------
+        perf = []
+        for mm in us.get("members", []):
+            atks = mm.get("attacks", [])
+            if not atks:
+                continue
+            stars = sum(a.get("stars", 0) for a in atks)
+            avg_d = sum(a.get("destructionPercentage", 0) for a in atks) / len(atks)
+            perf.append((stars, avg_d, mm, len(atks)))
+        perf.sort(key=lambda x: (-x[0], -x[1]))
+        if perf and state != "preparation":
+            prow = []
+            for i, (stars, avg_d, mm, n_at) in enumerate(perf[:10], 1):
+                rk_cls = f' rk{i}' if i <= 3 else ''
+                mvp_chip = (' <span class="mvpchip">&#127942; WAR MVP</span>'
+                            if i == 1 and state == "warEnded" else '')
+                prow.append(
+                    f'<tr><td class="num"><span class="rk{rk_cls}">{i}</span></td>'
+                    f'<td style="white-space:nowrap">{esc(mm["name"])}'
+                    f'{owner_tag(mm["tag"], small=True)}{mvp_chip}</td>'
+                    f'<td class="num">{n_at}</td>'
+                    f'<td class="num"><span class="st">&#9733;</span> <b>{stars}</b></td>'
+                    f'<td class="num">{avg_d:.0f}%</td></tr>')
+            topatk_html = f"""
+            <div class="card"><h2>Top attackers</h2>
+            <div class="table-scroll"><table>
+              <thead><tr><th class="num">#</th><th>Member</th><th class="num">Attacks</th>
+              <th class="num">Stars</th><th class="num">Avg destruction</th></tr></thead>
+              <tbody>{''.join(prow)}</tbody>
+            </table></div></div>"""
+
         # who is ahead right now (stars, then destruction); 0 = tied / prep day
         if state == "preparation":
             lead = 0
@@ -2154,6 +2390,57 @@ def build_page(data, live_seconds=None):
             f' &ndash; <b>{them["stars"]}</b> <span class="quiet">vs</span> '
             f'<span class="g-name">{esc(them["name"])}</span></div>')
 
+    # --------------------------- CWL standings -------------------------------
+    cwl_html = ""
+    cwl_wars = data.get("cwl_wars") or []
+    if cwl_wars:
+        standings = {}
+        for w2 in cwl_wars:
+            st2 = w2.get("state")
+            if st2 == "preparation":
+                continue
+            for k, ok_ in (("clan", "opponent"), ("opponent", "clan")):
+                c2, o2 = w2.get(k) or {}, w2.get(ok_) or {}
+                t2 = c2.get("tag")
+                if not t2:
+                    continue
+                e = standings.setdefault(t2, {
+                    "name": c2.get("name", "?"), "stars": 0, "destr": 0.0,
+                    "wins": 0, "played": 0,
+                    "badge": (c2.get("badgeUrls") or {}).get("small", "")})
+                e["stars"] += c2.get("stars", 0)
+                e["destr"] += c2.get("destructionPercentage", 0)
+                if st2 == "warEnded":
+                    e["played"] += 1
+                    if ((c2.get("stars", 0), c2.get("destructionPercentage", 0))
+                            > (o2.get("stars", 0), o2.get("destructionPercentage", 0))):
+                        e["wins"] += 1
+        if standings:
+            ranked = sorted(standings.items(),
+                            key=lambda kv: (-(kv[1]["stars"] + 10 * kv[1]["wins"]),
+                                            -kv[1]["destr"]))
+            srows = []
+            for i, (t2, e) in enumerate(ranked, 1):
+                us_cls = ' class="cwl-us"' if t2 == CLAN_TAG else ''
+                b = (f'<img class="wl-badge" src="{esc(e["badge"])}" alt="">'
+                     if e["badge"] else '')
+                srows.append(
+                    f'<tr{us_cls}><td class="num">{i}</td>'
+                    f'<td style="white-space:nowrap">{b}{esc(e["name"])}</td>'
+                    f'<td class="num">{e["wins"]}/{e["played"]}</td>'
+                    f'<td class="num"><span class="st">&#9733;</span> '
+                    f'<b>{e["stars"] + 10 * e["wins"]}</b></td>'
+                    f'<td class="num">{e["destr"]:.0f}%</td></tr>')
+            cwl_html = f"""
+            <div class="card"><h2>CWL standings</h2>
+            <p class="quiet" style="margin-bottom:10px">Stars include the
+            +10 bonus per war won. Destruction is the running total.</p>
+            <div class="table-scroll"><table>
+              <thead><tr><th class="num">#</th><th>Clan</th><th class="num">Wins</th>
+              <th class="num">Stars</th><th class="num">Destruction</th></tr></thead>
+              <tbody>{''.join(srows)}</tbody>
+            </table></div></div>"""
+
     # --------------------------- members tab ---------------------------------
     eqmap = _equip_hero_map(profiles)
     member_data = {m["tag"]: _member_payload(m, profiles, eqmap) for m in members}
@@ -2182,15 +2469,20 @@ def build_page(data, live_seconds=None):
         else:
             rz = 'rz-ok' if rush <= 15 else ('rz-mid' if rush <= 40 else 'rz-bad')
             rush_html, rush_attr = f'<span class="{rz}">{rush}%</span>', rush
+        wp = md.get("wp", "")
+        wp_html = ('<span class="wpb wp-in" title="opted IN for wars">&#9876;</span>'
+                   if wp == "in" else
+                   '<span class="wpb wp-out" title="opted OUT of wars">&#128164;</span>'
+                   if wp == "out" else '')
         mrows.append(
             f'<div class="mitem" data-tag="{esc(m["tag"])}" data-don="{m["donations"]}" '
             f'data-tro="{m["trophies"]}" data-th="{md["th"]}" data-xp="{md["xp"]}" '
-            f'data-rush="{rush_attr}">'
+            f'data-rush="{rush_attr}" data-bb="{md.get("bbt", 0)}">'
             f'<span class="rk{rk_cls}">{i}</span>'
             f'{th_avatar(md["th"], 34)}'
             f'<div class="mi-main">'
             f'<div class="mi-name">{esc(m["name"])}{owner_tag(m["tag"], small=True)}</div>'
-            f'<div class="mi-sub"><span class="role-chip role-{m["role"]}">'
+            f'<div class="mi-sub">{wp_html}<span class="role-chip role-{m["role"]}">'
             f'{ROLE_NAMES.get(m["role"], m["role"])}</span> '
             f'XP {md["xp"]} &middot; &#127942; {m["trophies"]:,} &middot; {rush_html}</div>'
             f'</div>'
@@ -2201,9 +2493,9 @@ def build_page(data, live_seconds=None):
         rows.append(
             f'<tr data-tag="{esc(m["tag"])}" data-don="{m["donations"]}" '
             f'data-tro="{m["trophies"]}" data-th="{md["th"]}" data-xp="{md["xp"]}" '
-            f'data-rush="{rush_attr}">'
+            f'data-rush="{rush_attr}" data-bb="{md.get("bbt", 0)}">'
             f'<td class="num"><span class="rk{rk_cls}">{i}</span></td>'
-            f'<td>{th_avatar(md["th"])}{esc(m["name"])}{owner_tag(m["tag"])}</td>'
+            f'<td>{th_avatar(md["th"])}{esc(m["name"])}{owner_tag(m["tag"])}{wp_html}</td>'
             f'<td><span class="role-chip role-{m["role"]}">{ROLE_NAMES.get(m["role"], m["role"])}</span></td>'
             f'<td class="num">{md["xp"]}</td>'
             f'<td class="num">{m["trophies"]:,}</td>'
@@ -2230,13 +2522,16 @@ def build_page(data, live_seconds=None):
       <button class="sortbtn" data-sort="th" style="--tint:var(--blue)"><span class="si">&#127984;</span>Town Hall<span class="dir"></span></button>
       <button class="sortbtn" data-sort="xp" style="--tint:var(--violet)"><span class="si">&#11088;</span>XP level<span class="dir"></span></button>
       <button class="sortbtn" data-sort="rush" style="--tint:var(--red)"><span class="si">&#127939;</span>Rushed<span class="dir"></span></button>
+      <button class="sortbtn" data-sort="bb" style="--tint:var(--aqua)"><span class="si">&#128296;</span>Builder<span class="dir"></span></button>
     </div>"""
 
     war_league_name = esc((clan.get("warLeague") or {}).get("name", ""))
+    war_in = sum(1 for p in profiles.values() if p.get("warPreference") == "in")
     chip_defs = [
         ("&#128101;", f'{clan["members"]}/50 members', "--blue"),
         ("&#127942;", f'{clan["clanPoints"]:,} points', "--gold"),
         ("&#9876;&#65039;", f'{clan.get("warWins", "?")} war wins', "--red"),
+        ("&#9876;", f'{war_in} opted in for war' if war_in else "", "--green"),
         ("&#128737;&#65039;", war_league_name, "--aqua"),
     ]
     chips_html = "".join(
@@ -2350,30 +2645,41 @@ def build_page(data, live_seconds=None):
         cap_rows = []
         if cap_members:
             top_loot = max(m.get("capitalResourcesLooted", 0) for m in cap_members) or 1
+            off_r = latest.get("offensiveReward", 0)
+            def_r = latest.get("defensiveReward", 0)
             for i, m in enumerate(cap_members, 1):
                 limit = m.get("attackLimit", 5) + m.get("bonusAttackLimit", 0)
                 used = m.get("attacks", 0)
                 loot = m.get("capitalResourcesLooted", 0)
                 bar = round(loot / top_loot * 100)
                 rk_cls = f' rk{i}' if i <= 3 else ''
-                atk_cls = "status-done" if used >= limit else \
-                          ("status-left" if used == 0 else "")
+                atk_cls = ("status-done" if used >= limit else
+                           "status-missed" if used == 0 else "status-left")
+                medals = used * off_r + def_r
                 cap_rows.append(
                     f'<tr><td class="num"><span class="rk{rk_cls}">{i}</span></td>'
-                    f'<td style="white-space:nowrap">{esc(m["name"])}</td>'
+                    f'<td style="white-space:nowrap">{esc(m["name"])}'
+                    f'{owner_tag(m.get("tag", ""), small=True)}</td>'
                     f'<td class="num"><span class="{atk_cls}">{used}/{limit}</span></td>'
+                    f'<td class="num">{medals:,}</td>'
                     f'<td class="num">{loot:,}'
                     f'<div class="cellbar"><div style="width:{bar}%"></div></div></td></tr>')
             missing = len(clan["memberList"]) - len(cap_members)
             missing_note = (f'<p class="quiet" style="margin-top:10px">'
                             f'{missing} clan member{"s" if missing != 1 else ""} '
-                            f'did not participate.</p>') if missing > 0 else ''
+                            f'did not participate. Attacks: '
+                            f'<span class="status-done">all used</span> &middot; '
+                            f'<span class="status-left">partial</span> &middot; '
+                            f'<span class="status-missed">none</span>. Medals '
+                            f'&asymp; attacks &times; offense reward + defense bonus.'
+                            f'</p>') if missing > 0 else ''
             capital_html = f"""{cap_tiles_html}
             <h2 style="margin-top:20px">Raid participants &mdash; {season_range}</h2>
             <div class="table-scroll">
             <table>
               <thead><tr><th class="num">#</th><th>Member</th>
-              <th class="num">Attacks</th><th class="num">Capital loot</th></tr></thead>
+              <th class="num">Attacks</th><th class="num">Medals &asymp;</th>
+              <th class="num">Capital loot</th></tr></thead>
               <tbody>{''.join(cap_rows)}</tbody>
             </table>
             </div>{missing_note}"""
@@ -2403,6 +2709,37 @@ def build_page(data, live_seconds=None):
               <tbody>{''.join(past_rows)}</tbody>
             </table>
             </div></div>"""
+
+    # ---------------- gold pass countdown + TH spread (overview) --------------
+    gp_html = ""
+    gp = data.get("goldpass") or {}
+    if gp.get("endTime"):
+        try:
+            left = parse_coc_time(gp["endTime"]) - datetime.now(timezone.utc)
+            secs = max(0, int(left.total_seconds()))
+            gp_html = (f'<div class="gp-strip"><span class="gp-ico">&#127915;</span>'
+                       f'<b>Gold Pass season</b>&nbsp;ends in '
+                       f'{secs // 86400}d {secs % 86400 // 3600}h'
+                       f'<span class="quiet">&nbsp;&middot; donations and season '
+                       f'stats reset then</span></div>')
+        except Exception:
+            pass
+
+    th_counts = {}
+    for m in clan.get("memberList", []):
+        t = m.get("townHallLevel")
+        if isinstance(t, int):
+            th_counts[t] = th_counts.get(t, 0) + 1
+    thd_html = ""
+    if th_counts:
+        mx = max(th_counts.values())
+        thd_rows = "".join(
+            f'<div class="thd-row">{th_avatar(t, 24)}'
+            f'<div class="thd-bar"><div style="width:{c / mx * 100:.0f}%"></div></div>'
+            f'<span class="thd-n">{c}</span></div>'
+            for t, c in sorted(th_counts.items(), reverse=True))
+        thd_html = (f'<h2 style="margin-top:20px">Town Hall spread</h2>'
+                    f'<div class="thd">{thd_rows}</div>')
 
     # ------------------------------- banner ----------------------------------
     crest = clan.get("badgeUrls", {}).get("medium", "")
@@ -2509,7 +2846,7 @@ def build_page(data, live_seconds=None):
 </nav>
 
 <section class="panel" id="panel-overview">
-  <div class="card"><div class="tiles">{tiles_html}</div></div>
+  <div class="card"><div class="tiles">{tiles_html}</div>{gp_html}{thd_html}</div>
   <div class="card"><h2>Clan MVPs</h2>{mvp_html}</div>
   <div class="card{glance_cls}"><h2>{glance_title}</h2>{war_mini}</div>
   {about_html}
@@ -2517,8 +2854,11 @@ def build_page(data, live_seconds=None):
 
 <section class="panel" id="panel-war">
   <div class="card{war_cls}"><h2>Current war</h2>{war_html}</div>
+  {cwl_html}
+  {topatk_html}
   {scout_html}
   {roster_html}
+  {timeline_html}
 </section>
 
 <div class="modal-back" id="member-back" hidden>
@@ -2528,7 +2868,10 @@ def build_page(data, live_seconds=None):
 <section class="panel" id="panel-members">
   <div class="card"><h2>Members
   <span class="im h2-info" data-info title="How this works">&#9432;</span></h2>
-  <div class="chips">{chips_html}</div>{sortbar_html}{table_html}</div>
+  <div class="chips">{chips_html}</div>
+  <input id="msearch" class="msearch" type="search"
+         placeholder="&#128269; Search member or owner..." autocomplete="off">
+  {sortbar_html}{table_html}</div>
   <div class="card"><h2>Compare members</h2>
     <div class="cmp-bar">
       <select id="cmpA" class="cmpsel"></select>
@@ -2551,7 +2894,9 @@ def build_page(data, live_seconds=None):
 <footer>{footer_html}</footer>
 {INFO_MODAL}
 <script>const MEMBERS = {members_json};
-const UICONS = {json.dumps(UNIT_ICONS)};</script>
+const UICONS = {json.dumps(UNIT_ICONS)};
+const CLAN_NAME = {json.dumps(clan_name)};
+const WAR_FX = {json.dumps(war_fx)};</script>
 <script>{PAGE_JS}{live_js}</script>
 </body></html>"""
 
